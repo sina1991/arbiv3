@@ -46,9 +46,10 @@ Validate a configured V3 market's RPC, chain ID, factory getPool mapping, pool f
 ```bash
 python main.py --validate plunderswap_v3_wzil_zusdt_reference
 python main.py --check-networks
+python main.py --scan
 ```
 
-Validation outputs are written to `reports/` in JSON and CSV. A successful deployment probe alone does not prove token USD parity, gas conversion, CEX mapping or economic profitability.
+Validation outputs are written to `reports/` in JSON and CSV. `--scan` runs all enabled markets through the V3 quote grid, KuCoin L2 evaluation and same-chain V3-V3 comparison. A successful deployment probe alone does not prove token USD parity, gas conversion, CEX mapping or economic profitability.
 
 ## V3 architecture
 
