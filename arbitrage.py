@@ -9,12 +9,13 @@ def evaluate_opportunities(
     kucoin_bid: Decimal,
     kucoin_ask: Decimal,
     kucoin_fee: Decimal,
-    minimum_profit: Decimal,
+    minimum_profit: Decimal | dict[Decimal, Decimal],
     gas_cost_usdt: Decimal | None,
 ) -> list[Opportunity]:
     """Evaluate pre-funded cross-venue routes using V3 quotes and KuCoin top-of-book."""
     opportunities: list[Opportunity] = []
     for size in sizes:
+        threshold = minimum_profit.get(size, Decimal("0")) if isinstance(minimum_profit, dict) else minimum_profit
         # Buy WZIL on V3 (spend zUSDT), then sell ZIL on KuCoin.
         buy_cost = dex_exact_output_buy.get(size)
         if buy_cost is not None:
@@ -25,7 +26,7 @@ def evaluate_opportunities(
             opportunities.append(Opportunity(
                 Direction.BUY_WZIL_ON_DEX_SELL_ZIL_ON_CEX, size, buy_cost,
                 Decimal("0"), Decimal("0"), proceeds, net_profit, gas_cost_usdt,
-                complete and net_profit >= minimum_profit,
+                complete and net_profit >= threshold,
                 "gas-adjusted estimate" if complete else "gas conversion unavailable; not executable"
             ))
 
@@ -42,4 +43,5 @@ def evaluate_opportunities(
                 complete and net_profit >= minimum_profit,
                 "gas-adjusted estimate" if complete else "gas conversion unavailable; not executable"
             ))
-    return sorted(opportunities, key=lambda item: item.estimated_profit_usdt, reverse=True)
+    # Preserve the strategy's size-first policy: inspect the largest executable size first.
+    return sorted(opportunities, key=lambda item: item.zil_size, reverse=True)
