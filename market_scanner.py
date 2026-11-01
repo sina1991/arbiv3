@@ -410,7 +410,7 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
             except Exception as exc:
                 capacity, capacity_error = None, f"{type(exc).__name__}: {exc}"
             rows.append({"route":route,"market_a":market_id,"market_b":None,
-                         "capital_usdt":capital,"gross_profit_usdt":gross,
+                         "capital_usdt":capital,"gross_profit_usdt":gross,"slippage_bps":slippage_bps,
                          "gas_cost_usdt":gas_cost_usdt,"net_profit_usdt":net,
                          "roi_percent":net/capital*100 if net is not None else None,
                          "capacity_usdt":capacity,"status":"VERIFIED" if net is not None and capacity is not None else "INSUFFICIENT_DATA",
@@ -469,7 +469,7 @@ def evaluate_dex_dex(*, market_a: dict[str, Any], market_b: dict[str, Any],
             except Exception as exc:
                 capacity, capacity_error = None, f"{type(exc).__name__}: {exc}"
             rows.append({"route":"DEX_DEX","market_a":source["id"],"market_b":destination["id"],
-                         "capital_usdt":capital,"gross_profit_usdt":gross,"gas_cost_usdt":gas,
+                         "capital_usdt":capital,"gross_profit_usdt":gross,"slippage_bps":slippage_bps,"gas_cost_usdt":gas,
                          "net_profit_usdt":net,"roi_percent":net/capital*100 if net is not None else None,
                          "capacity_usdt":capacity,"status":"VERIFIED" if net is not None and capacity is not None else "INSUFFICIENT_DATA",
                          "reason":None if net is not None and capacity is not None else
