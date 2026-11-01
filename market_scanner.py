@@ -53,6 +53,17 @@ POOL_ABI_UINT32_FEE_PROTOCOL = json.loads(json.dumps(POOL_ABI))
 POOL_ABI_UINT32_FEE_PROTOCOL[-1]["outputs"][5]["type"] = "uint32"
 
 
+def configure_chain_middleware(web3: Web3, chain_id: int) -> None:
+    """Install the POA extraData middleware required by Polygon RPC block headers."""
+    if int(chain_id) != 137:
+        return
+    try:
+        from web3.middleware import ExtraDataToPOAMiddleware as poa_middleware
+    except ImportError:  # web3.py v6 compatibility
+        from web3.middleware import geth_poa_middleware as poa_middleware
+    web3.middleware_onion.inject(poa_middleware, layer=0)
+
+
 def _address(value: str) -> str:
     if not Web3.is_address(value):
         raise ValueError(f"Invalid EVM address: {value}")
@@ -617,6 +628,7 @@ def verify_network_connectivity(chains: Iterable[dict[str, Any]]) -> list[dict[s
         try:
             rpc = rpc_for_chain(chain)
             w3 = Web3(Web3.HTTPProvider(rpc, request_kwargs={"timeout": 10}))
+            configure_chain_middleware(w3, int(chain["id"]))
             if not w3.is_connected():
                 raise ConnectionError("RPC is not reachable")
             actual = int(w3.eth.chain_id)
@@ -642,6 +654,7 @@ def verify_market(market: dict[str, Any], chain: dict[str, Any]) -> tuple[V3Pool
     if not rpc:
         raise RuntimeError(f"RPC not configured: {chain['rpc_env']}")
     w3 = Web3(Web3.HTTPProvider(rpc,request_kwargs={"timeout":20}))
+    configure_chain_middleware(w3, int(chain["id"]))
     if not w3.is_connected():
         raise ConnectionError("RPC connectivity failed")
     snapshot = V3PoolValidator(w3).validate(
@@ -684,6 +697,7 @@ def verify_v3_deployments(chains: Iterable[dict[str, Any]]) -> list[dict[str, An
         try:
             rpc = rpc_for_chain(chain)
             w3 = Web3(Web3.HTTPProvider(rpc, request_kwargs={"timeout":20}))
+            configure_chain_middleware(w3, int(chain["id"]))
             if not w3.is_connected():
                 raise ConnectionError("RPC connectivity failed")
             actual_chain_id = int(w3.eth.chain_id)
@@ -735,6 +749,7 @@ def discover_and_validate_v3_candidates(candidates: Iterable[dict[str, Any]],
         try:
             rpc = rpc_for_chain(chain)
             w3 = Web3(Web3.HTTPProvider(rpc,request_kwargs={"timeout":20}))
+            configure_chain_middleware(w3, int(chain["id"]))
             if not w3.is_connected():
                 raise ConnectionError("RPC connectivity failed")
             if int(w3.eth.chain_id) != int(chain["id"]):
