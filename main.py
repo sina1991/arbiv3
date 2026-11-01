@@ -57,7 +57,7 @@ async def run_cycle(dex: PlunderSwapV3, kucoin: KuCoinClient):
     gas_cost = await asyncio.to_thread(dex.gas_cost_usdt, bid)
     opportunities = evaluate_opportunities(
         settings.trade_sizes_zil, sell_quotes, buy_quotes, bid, ask,
-        settings.kucoin_fee_rate, settings.min_profit_usdt, gas_cost,
+        settings.kucoin_fee_rate, dict(zip(settings.trade_sizes_zil, settings.min_profit_by_size)), gas_cost,
     )
     dex_balances = await asyncio.to_thread(dex.balances)
     dex_allowances = await asyncio.to_thread(dex.allowances)
@@ -132,7 +132,7 @@ async def run_cycle(dex: PlunderSwapV3, kucoin: KuCoinClient):
                 logger.warning("Skip %s: insufficient available USDT on KuCoin", item.direction.value)
                 continue
 
-        if fresh_profit < settings.min_profit_usdt:
+        if fresh_profit < settings.profit_threshold(item.zil_size):
             logger.info("Skip %s: fresh estimated profit %s is below threshold", item.direction.value, fresh_profit)
             continue
         fresh_candidates.append((fresh_profit, item, amount_in, amount_out))
@@ -141,7 +141,7 @@ async def run_cycle(dex: PlunderSwapV3, kucoin: KuCoinClient):
         logger.info("No opportunity passed fresh profitability, balance, allowance and gas checks.")
         return
 
-    fresh_candidates.sort(key=lambda row: row[0], reverse=True)
+    fresh_candidates.sort(key=lambda row: row[1].zil_size, reverse=True)
     fresh_profit, best, amount_in, amount_out = fresh_candidates[0]
 
     if best.direction is Direction.BUY_WZIL_ON_DEX_SELL_ZIL_ON_CEX:
