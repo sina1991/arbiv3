@@ -1,223 +1,254 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import json
 import logging
 import os
-from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Iterable
 
 import aiohttp
 from web3 import Web3
 
 log = logging.getLogger("arbiV3.scanner")
 DEXSCREENER_SEARCH = "https://api.dexscreener.com/latest/dex/search"
+CAPITAL_SIZES_USDT = tuple(Decimal(x) for x in ("100", "250", "500", "1000", "2500", "5000"))
 
 ERC20_ABI = [
-    {"type": "function", "name": "decimals", "stateMutability": "view",
-     "inputs": [], "outputs": [{"type": "uint8"}]},
+    {"type":"function","name":"decimals","stateMutability":"view","inputs":[],"outputs":[{"type":"uint8"}]},
+    {"type":"function","name":"symbol","stateMutability":"view","inputs":[],"outputs":[{"type":"string"}]},
 ]
-V2_POOL_ABI = [
-    {"type": "function", "name": "token0", "stateMutability": "view",
-     "inputs": [], "outputs": [{"type": "address"}]},
-    {"type": "function", "name": "token1", "stateMutability": "view",
-     "inputs": [], "outputs": [{"type": "address"}]},
-    {"type": "function", "name": "getReserves", "stateMutability": "view",
-     "inputs": [], "outputs": [{"type": "uint112"}, {"type": "uint112"}, {"type": "uint32"}]},
+FACTORY_ABI = [
+    {"type":"function","name":"getPool","stateMutability":"view",
+     "inputs":[{"name":"tokenA","type":"address"},{"name":"tokenB","type":"address"},{"name":"fee","type":"uint24"}],
+     "outputs":[{"name":"pool","type":"address"}]}
+]
+POOL_ABI = [
+    {"type":"function","name":"factory","stateMutability":"view","inputs":[],"outputs":[{"type":"address"}]},
+    {"type":"function","name":"token0","stateMutability":"view","inputs":[],"outputs":[{"type":"address"}]},
+    {"type":"function","name":"token1","stateMutability":"view","inputs":[],"outputs":[{"type":"address"}]},
+    {"type":"function","name":"fee","stateMutability":"view","inputs":[],"outputs":[{"type":"uint24"}]},
+    {"type":"function","name":"tickSpacing","stateMutability":"view","inputs":[],"outputs":[{"type":"int24"}]},
+    {"type":"function","name":"liquidity","stateMutability":"view","inputs":[],"outputs":[{"type":"uint128"}]},
+    {"type":"function","name":"slot0","stateMutability":"view","inputs":[],"outputs":[
+        {"type":"uint160"},{"type":"int24"},{"type":"uint16"},{"type":"uint16"},
+        {"type":"uint16"},{"type":"uint8"},{"type":"bool"}]},
 ]
 QUOTER_V2_ABI = [
-    {"type": "function", "name": "quoteExactInputSingle", "stateMutability": "nonpayable",
-     "inputs": [{"name": "params", "type": "tuple", "components": [
-         {"name": "tokenIn", "type": "address"},
-         {"name": "tokenOut", "type": "address"},
-         {"name": "amountIn", "type": "uint256"},
-         {"name": "fee", "type": "uint24"},
-         {"name": "sqrtPriceLimitX96", "type": "uint160"}
-     ]}],
-     "outputs": [
-         {"name": "amountOut", "type": "uint256"},
-         {"name": "sqrtPriceX96After", "type": "uint160"},
-         {"name": "initializedTicksCrossed", "type": "uint32"},
-         {"name": "gasEstimate", "type": "uint256"}
-     ]}
+    {"type":"function","name":"quoteExactInputSingle","stateMutability":"nonpayable",
+     "inputs":[{"name":"params","type":"tuple","components":[
+         {"name":"tokenIn","type":"address"},{"name":"tokenOut","type":"address"},
+         {"name":"amountIn","type":"uint256"},{"name":"fee","type":"uint24"},
+         {"name":"sqrtPriceLimitX96","type":"uint160"}]}],
+     "outputs":[{"name":"amountOut","type":"uint256"},{"name":"sqrtPriceX96After","type":"uint160"},
+                {"name":"initializedTicksCrossed","type":"uint32"},{"name":"gasEstimate","type":"uint256"}]},
 ]
 
 
+def _address(value: str) -> str:
+    if not Web3.is_address(value):
+        raise ValueError(f"Invalid EVM address: {value}")
+    return Web3.to_checksum_address(value)
+
+
+def _decimal(value: Any) -> Decimal:
+    return Decimal(str(value))
+
+
+def to_raw(amount: Decimal, decimals: int) -> int:
+    if decimals < 0 or decimals > 255 or amount < 0:
+        raise ValueError("Invalid token amount or decimals")
+    scaled = amount * (Decimal(10) ** decimals)
+    if scaled != scaled.to_integral_value():
+        raise ValueError("Amount has more precision than token decimals")
+    return int(scaled)
+
+
+def from_raw(amount: int, decimals: int) -> Decimal:
+    return Decimal(amount) / (Decimal(10) ** decimals)
+
+
 @dataclass(frozen=True)
-class MarketQuote:
-    market_id: str
+class V3PoolSnapshot:
+    chain_id: int
+    factory: str
+    pool: str
+    token0: str
+    token1: str
+    token0_decimals: int
+    token1_decimals: int
+    fee: int
+    tick_spacing: int
+    sqrt_price_x96: int
+    tick: int
+    liquidity: int
+    unlocked: bool
+    block_number: int
+    timestamp_utc: str
+    status: str = "VERIFIED"
+
+
+@dataclass(frozen=True)
+class V3Quote:
+    token_in: str
+    token_out: str
     amount_in: Decimal
     amount_out: Decimal
-    price_impact_bps: Decimal | None = None
+    effective_price: Decimal
+    spot_price: Decimal
+    price_impact_bps: Decimal
+    initialized_ticks_crossed: int
+    gas_estimate: int
+    block_number: int
+    timestamp_utc: str
+    fee_units: int
+    tick_before: int
+    sqrt_price_x96_after: int
 
 
-@dataclass(frozen=True)
-class RankedOpportunity:
-    route: str
-    market_a: str
-    market_b: str | None
-    capital_usdt: Decimal
-    gross_profit_usdt: Decimal
-    gas_cost_usdt: Decimal | None
-    net_profit_usdt: Decimal | None
-    roi_percent: Decimal | None
-    capacity_usdt: Decimal | None
-    score: Decimal
-    rank: int = 0
+class V3PoolValidator:
+    """Validate chain, deployed factory, factory mapping, pool state and ERC-20 metadata."""
+
+    def __init__(self, web3: Web3):
+        self.w3 = web3
+
+    def validate(self, *, expected_chain_id: int, factory_address: str,
+                 pool_address: str, token_a: str, token_b: str, fee: int) -> V3PoolSnapshot:
+        if int(self.w3.eth.chain_id) != int(expected_chain_id):
+            raise ValueError(f"Chain ID mismatch: expected {expected_chain_id}, got {self.w3.eth.chain_id}")
+        if not 0 <= int(fee) < 1_000_000:
+            raise ValueError("V3 fee must be an integer in [0, 999999]")
+        factory_address, pool_address = _address(factory_address), _address(pool_address)
+        token_a, token_b = _address(token_a), _address(token_b)
+        if token_a.lower() == token_b.lower():
+            raise ValueError("Pool tokens must be different")
+        for label, address in (("factory", factory_address), ("pool", pool_address),
+                               ("tokenA", token_a), ("tokenB", token_b)):
+            if not self.w3.eth.get_code(address):
+                raise ValueError(f"{label} has no deployed bytecode: {address}")
+        factory = self.w3.eth.contract(address=factory_address, abi=FACTORY_ABI)
+        pool = self.w3.eth.contract(address=pool_address, abi=POOL_ABI)
+        factory_reported = _address(factory.functions.getPool(token_a, token_b, int(fee)).call())
+        if factory_reported.lower() != pool_address.lower():
+            raise ValueError("Factory getPool(tokenA, tokenB, fee) does not match configured pool")
+        actual_factory = _address(pool.functions.factory().call())
+        if actual_factory.lower() != factory_address.lower():
+            raise ValueError("Pool factory() does not match configured factory")
+        token0, token1 = _address(pool.functions.token0().call()), _address(pool.functions.token1().call())
+        if {token0.lower(), token1.lower()} != {token_a.lower(), token_b.lower()}:
+            raise ValueError("Pool token0/token1 do not match configured token pair")
+        actual_fee = int(pool.functions.fee().call())
+        if actual_fee != int(fee):
+            raise ValueError(f"Pool fee mismatch: configured {fee}, on-chain {actual_fee}")
+        spacing = int(pool.functions.tickSpacing().call())
+        if spacing <= 0:
+            raise ValueError("Pool tickSpacing is invalid")
+        token0_contract = self.w3.eth.contract(address=token0, abi=ERC20_ABI)
+        token1_contract = self.w3.eth.contract(address=token1, abi=ERC20_ABI)
+        decimals0 = int(token0_contract.functions.decimals().call())
+        decimals1 = int(token1_contract.functions.decimals().call())
+        if not 0 <= decimals0 <= 255 or not 0 <= decimals1 <= 255:
+            raise ValueError("Invalid on-chain token decimals")
+        slot = pool.functions.slot0().call()
+        sqrt_price, tick, unlocked = int(slot[0]), int(slot[1]), bool(slot[6])
+        liquidity = int(pool.functions.liquidity().call())
+        if sqrt_price <= 0 or liquidity <= 0 or not unlocked:
+            raise ValueError("Pool has no active price/liquidity or is locked")
+        block = self.w3.eth.get_block("latest")
+        return V3PoolSnapshot(
+            int(expected_chain_id), factory_address, pool_address, token0, token1,
+            decimals0, decimals1, actual_fee, spacing, sqrt_price, tick, liquidity,
+            unlocked, int(block["number"]),
+            datetime.fromtimestamp(int(block["timestamp"]), timezone.utc).isoformat(),
+        )
+
+
+class V3QuoterV2:
+    """A QuoterV2 is accepted only after code and successful quote-call validation."""
+
+    def __init__(self, web3: Web3, address: str):
+        self.w3 = web3
+        self.address = _address(address)
+        if not self.w3.eth.get_code(self.address):
+            raise ValueError("QuoterV2 address has no deployed bytecode")
+        self.contract = self.w3.eth.contract(address=self.address, abi=QUOTER_V2_ABI)
+
+    def quote(self, snapshot: V3PoolSnapshot, token_in: str, amount_in: Decimal) -> V3Quote:
+        token_in = _address(token_in)
+        if token_in.lower() == snapshot.token0.lower():
+            token_out = snapshot.token1
+            decimals_in, decimals_out = snapshot.token0_decimals, snapshot.token1_decimals
+            spot = (Decimal(snapshot.sqrt_price_x96) ** 2 / Decimal(2 ** 192)
+                    * (Decimal(10) ** (decimals_in - decimals_out)))
+        elif token_in.lower() == snapshot.token1.lower():
+            token_out = snapshot.token0
+            decimals_in, decimals_out = snapshot.token1_decimals, snapshot.token0_decimals
+            spot = (Decimal(2 ** 192) / Decimal(snapshot.sqrt_price_x96) ** 2
+                    * (Decimal(10) ** (decimals_in - decimals_out)))
+        else:
+            raise ValueError("token_in is not part of this V3 pool")
+        raw_in = to_raw(amount_in, decimals_in)
+        if raw_in <= 0:
+            raise ValueError("Quote amount rounds to zero")
+        params = (token_in, token_out, raw_in, snapshot.fee, 0)
+        result = self.contract.functions.quoteExactInputSingle(params).call()
+        raw_out, sqrt_after, ticks_crossed, gas_estimate = map(int, result)
+        if raw_out <= 0 or sqrt_after <= 0:
+            raise ValueError("QuoterV2 returned a non-positive output or price")
+        amount_out = from_raw(raw_out, decimals_out)
+        effective = amount_out / amount_in
+        impact = max(Decimal(0), (Decimal(1) - effective / spot) * Decimal(10_000))
+        block = self.w3.eth.get_block("latest")
+        return V3Quote(token_in, token_out, amount_in, amount_out, effective, spot,
+                       impact, ticks_crossed, gas_estimate, int(block["number"]),
+                       datetime.fromtimestamp(int(block["timestamp"]), timezone.utc).isoformat(),
+                       snapshot.fee, snapshot.tick, sqrt_after)
+
+    def validate_deployment(self, snapshot: V3PoolSnapshot, token_in: str,
+                             probe_amount: Decimal) -> V3Quote:
+        # Successful pool-specific quote validates ABI, address, token, fee and call path.
+        return self.quote(snapshot, token_in, probe_amount)
 
 
 def load_registry(path: str | Path = "market_registry.json") -> dict[str, Any]:
     with Path(path).open("r", encoding="utf-8") as handle:
         data = json.load(handle)
-    if data.get("schema_version") != 1:
-        raise ValueError("Unsupported market registry schema_version")
-    sizes = [Decimal(value) for value in data.get("capital_sizes_usdt", [])]
-    if not sizes or any(value <= 0 for value in sizes) or sizes != sorted(set(sizes)):
-        raise ValueError("capital_sizes_usdt must be unique, positive and ascending")
-    weights = data.get("ranking_weights", {})
-    if set(weights) != {"net_profit", "roi", "capital_capacity"}:
-        raise ValueError("ranking_weights must define net_profit, roi and capital_capacity")
-    if abs(sum(Decimal(str(v)) for v in weights.values()) - Decimal("1")) > Decimal("0.000001"):
-        raise ValueError("ranking_weights must sum to 1")
+    if data.get("schema_version") != 2:
+        raise ValueError("Unsupported registry schema; expected V3-only schema_version 2")
+    sizes = [_decimal(value) for value in data.get("capital_sizes_usdt", [])]
+    if sizes != list(CAPITAL_SIZES_USDT):
+        raise ValueError("Registry must define the six required capital sizes in order")
+    weights = {key: _decimal(value) for key, value in data.get("ranking_weights", {}).items()}
+    expected = {"net_profit": Decimal(".45"), "roi": Decimal(".35"), "capital_capacity": Decimal(".20")}
+    if weights != expected:
+        raise ValueError("Ranking weights must be net_profit=.45, roi=.35, capital_capacity=.20")
+    ids = [int(chain["id"]) for chain in data.get("chains", [])]
+    if len(ids) != len(set(ids)):
+        raise ValueError("Duplicate chain IDs in registry")
+    allowed = {1, 56, 137, 42161, 8453, 10, 43114, 32769}
+    if set(ids) != allowed:
+        raise ValueError("Registry chain IDs differ from the required network set")
+    seen: set[tuple[int, str]] = set()
+    for market in data.get("markets", []):
+        if market.get("version") != "V3" or market.get("quote_adapter") != "v3_quoter_v2":
+            raise ValueError("Only V3 markets and the V3 QuoterV2 adapter are permitted")
+        if market.get("enabled") is True:
+            required = ("factory", "pool", "quoter", "token0", "token1", "fee")
+            if any(not market.get(key) for key in required):
+                raise ValueError(f"Enabled V3 market {market.get('id')} is missing required contract metadata")
+            if market.get("status") != "verified":
+                raise ValueError("Only explicitly verified markets may be enabled")
+        pool = str(market.get("pool") or "").lower()
+        key = (int(market["chain_id"]), pool)
+        if pool and key in seen:
+            raise ValueError(f"Duplicate V3 pool in registry: {key}")
+        if pool:
+            seen.add(key)
     return data
-
-
-def _normalise(values: list[Decimal]) -> list[Decimal]:
-    if not values:
-        return []
-    maximum = max(max(values), Decimal("0"))
-    if maximum == 0:
-        return [Decimal("0") for _ in values]
-    return [max(value, Decimal("0")) / maximum for value in values]
-
-
-def rank_opportunities(rows: list[dict[str, Any]], weights: dict[str, Any]) -> list[RankedOpportunity]:
-    """Rank only fully-costed positive-net opportunities, independently per capital size."""
-    weight_profit = Decimal(str(weights["net_profit"]))
-    weight_roi = Decimal(str(weights["roi"]))
-    weight_capacity = Decimal(str(weights["capital_capacity"]))
-    groups: dict[Decimal, list[dict[str, Any]]] = {}
-    for row in rows:
-        capital = Decimal(str(row["capital_usdt"]))
-        net = row.get("net_profit_usdt")
-        if net is None or Decimal(str(net)) <= 0:
-            continue
-        groups.setdefault(capital, []).append(row)
-
-    ranked: list[RankedOpportunity] = []
-    for capital, group in groups.items():
-        profits = _normalise([Decimal(str(r["net_profit_usdt"])) for r in group])
-        rois = _normalise([Decimal(str(r["roi_percent"])) for r in group])
-        capacities = _normalise([
-            Decimal(str(r.get("capacity_usdt") or 0)) for r in group
-        ])
-        scored = []
-        for row, p, roi, capacity in zip(group, profits, rois, capacities):
-            score = (p * weight_profit + roi * weight_roi + capacity * weight_capacity) * 100
-            scored.append((score, row))
-        scored.sort(key=lambda item: (item[0], Decimal(str(item[1]["net_profit_usdt"]))), reverse=True)
-        for index, (score, row) in enumerate(scored, 1):
-            ranked.append(RankedOpportunity(
-                route=str(row["route"]),
-                market_a=str(row["market_a"]),
-                market_b=str(row["market_b"]) if row.get("market_b") else None,
-                capital_usdt=capital,
-                gross_profit_usdt=Decimal(str(row["gross_profit_usdt"])),
-                gas_cost_usdt=Decimal(str(row["gas_cost_usdt"])) if row.get("gas_cost_usdt") is not None else None,
-                net_profit_usdt=Decimal(str(row["net_profit_usdt"])),
-                roi_percent=Decimal(str(row["roi_percent"])),
-                capacity_usdt=Decimal(str(row["capacity_usdt"])) if row.get("capacity_usdt") is not None else None,
-                score=score.quantize(Decimal("0.01")),
-                rank=index,
-            ))
-    return sorted(ranked, key=lambda item: (item.capital_usdt, item.rank))
-
-
-class V2PoolQuoter:
-    """Read-only constant-product quote adapter for UniswapV2-compatible pools."""
-
-    def __init__(self, web3: Web3, pool_address: str, fee_bps: int):
-        if not 0 <= fee_bps < 10_000:
-            raise ValueError("V2 fee_bps must be in [0, 9999]")
-        self.w3 = web3
-        self.pool = web3.eth.contract(address=Web3.to_checksum_address(pool_address), abi=V2_POOL_ABI)
-        self.fee_bps = fee_bps
-        self.token0 = Web3.to_checksum_address(self.pool.functions.token0().call())
-        self.token1 = Web3.to_checksum_address(self.pool.functions.token1().call())
-        self.decimals = {
-            self.token0: int(web3.eth.contract(address=self.token0, abi=ERC20_ABI).functions.decimals().call()),
-            self.token1: int(web3.eth.contract(address=self.token1, abi=ERC20_ABI).functions.decimals().call()),
-        }
-
-    def quote_exact_input(self, token_in: str, amount_in: Decimal) -> Decimal:
-        token_in = Web3.to_checksum_address(token_in)
-        if token_in not in {self.token0, self.token1} or amount_in <= 0:
-            raise ValueError("Token is not in pool or amount is not positive")
-        reserve0, reserve1, _ = self.pool.functions.getReserves().call()
-        reserve_in, reserve_out = (reserve0, reserve1) if token_in == self.token0 else (reserve1, reserve0)
-        decimals_in = self.decimals[token_in]
-        token_out = self.token1 if token_in == self.token0 else self.token0
-        decimals_out = self.decimals[token_out]
-        amount_raw = int(amount_in * (Decimal(10) ** decimals_in))
-        amount_after_fee = amount_raw * (10_000 - self.fee_bps)
-        denominator = reserve_in * 10_000 + amount_after_fee
-        if reserve_in <= 0 or reserve_out <= 0 or denominator <= 0:
-            raise ValueError("Pool has no usable reserves")
-        output_raw = (amount_after_fee * reserve_out) // denominator
-        return Decimal(output_raw) / (Decimal(10) ** decimals_out)
-
-
-class V3QuoterV2:
-    """Read-only V3 quote adapter. Requires an independently verified QuoterV2 address."""
-
-    def __init__(self, web3: Web3, quoter_address: str, fee_units: int):
-        if not quoter_address or not web3.eth.get_code(Web3.to_checksum_address(quoter_address)):
-            raise ValueError("Configured QuoterV2 address has no on-chain code")
-        self.w3 = web3
-        self.quoter = web3.eth.contract(address=Web3.to_checksum_address(quoter_address), abi=QUOTER_V2_ABI)
-        self.fee_units = fee_units
-
-    def quote_exact_input(self, token_in: str, token_out: str, amount_in_raw: int) -> tuple[int, int]:
-        params = (Web3.to_checksum_address(token_in), Web3.to_checksum_address(token_out),
-                  amount_in_raw, self.fee_units, 0)
-        result = self.quoter.functions.quoteExactInputSingle(params).call()
-        return int(result[0]), int(result[3])
-
-
-async def discover_dexscreener_pairs(
-    query: str,
-    allowed_chain_names: set[str],
-    minimum_liquidity_usd: Decimal = Decimal("10000"),
-    minimum_volume_24h_usd: Decimal = Decimal("10000"),
-) -> list[dict[str, Any]]:
-    """Discover candidates only; returned metadata is not treated as verified on-chain truth."""
-    timeout = aiohttp.ClientTimeout(total=20)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(DEXSCREENER_SEARCH, params={"q": query}) as response:
-            response.raise_for_status()
-            payload = await response.json()
-    candidates = []
-    for pair in payload.get("pairs") or []:
-        liquidity = Decimal(str((pair.get("liquidity") or {}).get("usd") or 0))
-        volume = Decimal(str((pair.get("volume") or {}).get("h24") or 0))
-        chain = str(pair.get("chainId") or "").lower()
-        if chain not in allowed_chain_names or liquidity < minimum_liquidity_usd or volume < minimum_volume_24h_usd:
-            continue
-        candidates.append({
-            "chain": chain,
-            "dex": pair.get("dexId"),
-            "pair_address": pair.get("pairAddress"),
-            "base_token": pair.get("baseToken"),
-            "quote_token": pair.get("quoteToken"),
-            "price_usd": pair.get("priceUsd"),
-            "liquidity_usd": str(liquidity),
-            "volume_24h_usd": str(volume),
-            "url": pair.get("url"),
-            "verification_status": "DISCOVERY_ONLY_REQUIRES_ONCHAIN_VALIDATION",
-        })
-    return sorted(candidates, key=lambda item: Decimal(item["liquidity_usd"]), reverse=True)
 
 
 def rpc_for_chain(chain: dict[str, Any]) -> str:
@@ -227,94 +258,221 @@ def rpc_for_chain(chain: dict[str, Any]) -> str:
     return value
 
 
-def _opportunity_row(route: str, market_a: str, market_b: str | None,
-                     capital_usdt: Decimal, gross_profit_usdt: Decimal,
-                     gas_cost_usdt: Decimal | None) -> dict[str, Any]:
-    net = gross_profit_usdt - gas_cost_usdt if gas_cost_usdt is not None else None
-    roi = (net / capital_usdt * 100) if net is not None and capital_usdt > 0 else None
-    return {
-        "route": route, "market_a": market_a, "market_b": market_b,
-        "capital_usdt": capital_usdt, "gross_profit_usdt": gross_profit_usdt,
-        "gas_cost_usdt": gas_cost_usdt, "net_profit_usdt": net,
-        "roi_percent": roi, "capacity_usdt": None,
-    }
+def _normalise(values: list[Decimal]) -> list[Decimal]:
+    maximum = max(values, default=Decimal(0))
+    if maximum <= 0:
+        return [Decimal(0) for _ in values]
+    return [max(value, Decimal(0)) / maximum for value in values]
 
 
-def evaluate_dex_cex(
-    market_id: str, capital_sizes_usdt: list[Decimal],
-    quote_to_base: Any, base_to_quote: Any,
-    cex_bid: Decimal, cex_ask: Decimal, cex_fee_rate: Decimal,
-    quote_asset_usd_price: Decimal, gas_cost_usdt: Decimal | None,
-) -> list[dict[str, Any]]:
-    """Evaluate both pre-funded DEX-CEX directions for every quote-currency capital size."""
+@dataclass(frozen=True)
+class RankedOpportunity:
+    route: str
+    market_a: str
+    market_b: str | None
+    capital_usdt: Decimal
+    gross_profit_usdt: Decimal
+    gas_cost_usdt: Decimal
+    net_profit_usdt: Decimal
+    roi_percent: Decimal
+    capacity_usdt: Decimal
+    score: Decimal
+    rank: int
+    status: str = "VERIFIED"
+
+
+def rank_opportunities(rows: list[dict[str, Any]], weights: dict[str, Any]) -> list[RankedOpportunity]:
+    """Rank only verified, complete, positive-net opportunities; never infer missing cost as zero."""
+    groups: dict[Decimal, list[dict[str, Any]]] = {}
+    for row in rows:
+        if row.get("status") != "VERIFIED" or row.get("cross_chain") is True:
+            continue
+        required = ("gross_profit_usdt", "gas_cost_usdt", "net_profit_usdt",
+                    "roi_percent", "capacity_usdt", "capital_usdt")
+        if any(row.get(key) is None for key in required):
+            continue
+        if _decimal(row["net_profit_usdt"]) <= 0 or _decimal(row["gas_cost_usdt"]) < 0:
+            continue
+        groups.setdefault(_decimal(row["capital_usdt"]), []).append(row)
+    output: list[RankedOpportunity] = []
+    w_profit, w_roi, w_capacity = (_decimal(weights[k]) for k in ("net_profit", "roi", "capital_capacity"))
+    for capital, group in groups.items():
+        profits = _normalise([_decimal(row["net_profit_usdt"]) for row in group])
+        rois = _normalise([_decimal(row["roi_percent"]) for row in group])
+        capacities = _normalise([_decimal(row["capacity_usdt"]) for row in group])
+        scored = []
+        for row, p, r, c in zip(group, profits, rois, capacities):
+            score = (p*w_profit + r*w_roi + c*w_capacity) * 100
+            scored.append((score, row))
+        scored.sort(key=lambda item: (item[0], _decimal(item[1]["net_profit_usdt"])), reverse=True)
+        for rank, (score, row) in enumerate(scored, 1):
+            output.append(RankedOpportunity(
+                str(row["route"]), str(row["market_a"]),
+                str(row["market_b"]) if row.get("market_b") else None,
+                capital, _decimal(row["gross_profit_usdt"]), _decimal(row["gas_cost_usdt"]),
+                _decimal(row["net_profit_usdt"]), _decimal(row["roi_percent"]),
+                _decimal(row["capacity_usdt"]), score.quantize(Decimal(".01")), rank,
+            ))
+    return sorted(output, key=lambda item: (item.capital_usdt, item.rank))
+
+
+def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
+                     quote_to_base: Callable[[Decimal], Decimal],
+                     base_to_quote: Callable[[Decimal], Decimal],
+                     cex_bid: Decimal, cex_ask: Decimal, cex_fee_rate: Decimal,
+                     quote_asset_usd_price: Decimal, gas_cost_usdt: Decimal | None,
+                     status: str, asset_mapping_verified: bool) -> list[dict[str, Any]]:
+    if status != "VERIFIED" or not asset_mapping_verified:
+        return [{"route":"DEX_CEX","market_a":market_id,"status":"UNVERIFIED",
+                 "reason":"V3 market or CEX asset mapping is not verified"}]
     if min(cex_bid, cex_ask, quote_asset_usd_price) <= 0 or cex_bid > cex_ask:
-        raise ValueError("Invalid CEX prices or quote-asset USD conversion")
+        raise ValueError("Invalid CEX prices or quote asset conversion")
     if not 0 <= cex_fee_rate < 1:
-        raise ValueError("CEX fee rate must be in [0, 1)")
-    rows: list[dict[str, Any]] = []
-    for capital_usdt in capital_sizes_usdt:
-        capital_quote = capital_usdt / quote_asset_usd_price
-        base_from_dex = quote_to_base(capital_quote)
-        cex_sell_proceeds_usd = base_from_dex * cex_bid * (1 - cex_fee_rate) * quote_asset_usd_price
-        rows.append(_opportunity_row(
-            "DEX_CEX", market_id, None, capital_usdt,
-            cex_sell_proceeds_usd - capital_usdt, gas_cost_usdt,
-        ))
-
-        base_bought_cex = capital_quote / (cex_ask * (1 + cex_fee_rate))
-        quote_from_dex = base_to_quote(base_bought_cex)
-        dex_sell_proceeds_usd = quote_from_dex * quote_asset_usd_price
-        rows.append(_opportunity_row(
-            "CEX_DEX", market_id, None, capital_usdt,
-            dex_sell_proceeds_usd - capital_usdt, gas_cost_usdt,
-        ))
-
-    for row in rows:
-        same_route = [candidate for candidate in rows
-                      if candidate["route"] == row["route"]
-                      and candidate["net_profit_usdt"] is not None
-                      and candidate["net_profit_usdt"] > 0]
-        if same_route:
-            row["capacity_usdt"] = max(candidate["capital_usdt"] for candidate in same_route)
+        raise ValueError("Invalid CEX fee rate")
+    rows = []
+    for capital in capital_sizes_usdt:
+        quote_in = capital / quote_asset_usd_price
+        # Buy base on V3, sell base on CEX.
+        base_out = quote_to_base(quote_in)
+        gross_a = base_out * cex_bid * (1-cex_fee_rate) * quote_asset_usd_price - capital
+        # Buy base on CEX, sell base into V3.
+        base_bought = quote_in / (cex_ask * (1+cex_fee_rate))
+        quote_out = base_to_quote(base_bought)
+        gross_b = quote_out * quote_asset_usd_price - capital
+        for route, gross in (("DEX_CEX", gross_a), ("CEX_DEX", gross_b)):
+            net = gross - gas_cost_usdt if gas_cost_usdt is not None else None
+            rows.append({"route":route,"market_a":market_id,"market_b":None,
+                         "capital_usdt":capital,"gross_profit_usdt":gross,
+                         "gas_cost_usdt":gas_cost_usdt,"net_profit_usdt":net,
+                         "roi_percent":net/capital*100 if net is not None else None,
+                         "capacity_usdt":None,"status":"VERIFIED" if net is not None else "INSUFFICIENT_DATA",
+                         "reason":None if net is not None else "Gas cost unavailable"})
     return rows
 
 
-def evaluate_dex_dex(
-    market_a: str, market_b: str, capital_sizes_usdt: list[Decimal],
-    a_quote_to_base: Any, a_base_to_quote: Any,
-    b_quote_to_base: Any, b_base_to_quote: Any,
-    quote_asset_usd_price: Decimal,
-    gas_cost_a_usdt: Decimal | None, gas_cost_b_usdt: Decimal | None,
-) -> list[dict[str, Any]]:
-    """Compare two pools for the same chain and exact same base/quote token contracts."""
-    if quote_asset_usd_price <= 0:
-        raise ValueError("quote_asset_usd_price must be positive")
-    total_gas = (gas_cost_a_usdt + gas_cost_b_usdt
-                 if gas_cost_a_usdt is not None and gas_cost_b_usdt is not None else None)
-    rows: list[dict[str, Any]] = []
-    for capital_usdt in capital_sizes_usdt:
-        capital_quote = capital_usdt / quote_asset_usd_price
-
-        base_from_a = a_quote_to_base(capital_quote)
-        quote_from_b = b_base_to_quote(base_from_a)
-        rows.append(_opportunity_row(
-            "DEX_DEX", market_a, market_b, capital_usdt,
-            (quote_from_b - capital_quote) * quote_asset_usd_price, total_gas,
-        ))
-
-        base_from_b = b_quote_to_base(capital_quote)
-        quote_from_a = a_base_to_quote(base_from_b)
-        rows.append(_opportunity_row(
-            "DEX_DEX", market_b, market_a, capital_usdt,
-            (quote_from_a - capital_quote) * quote_asset_usd_price, total_gas,
-        ))
-
-    for row in rows:
-        same_direction = [candidate for candidate in rows
-                          if candidate["market_a"] == row["market_a"]
-                          and candidate["market_b"] == row["market_b"]
-                          and candidate["net_profit_usdt"] is not None
-                          and candidate["net_profit_usdt"] > 0]
-        if same_direction:
-            row["capacity_usdt"] = max(candidate["capital_usdt"] for candidate in same_direction)
+def evaluate_dex_dex(*, market_a: dict[str, Any], market_b: dict[str, Any],
+                     capital_sizes_usdt: Iterable[Decimal],
+                     a_quote_to_base: Callable[[Decimal], Decimal],
+                     a_base_to_quote: Callable[[Decimal], Decimal],
+                     b_quote_to_base: Callable[[Decimal], Decimal],
+                     b_base_to_quote: Callable[[Decimal], Decimal],
+                     quote_asset_usd_price: Decimal,
+                     gas_cost_a_usdt: Decimal | None, gas_cost_b_usdt: Decimal | None) -> list[dict[str, Any]]:
+    compatible = (market_a["chain_id"] == market_b["chain_id"]
+                  and market_a["token_base"]["address"].lower() == market_b["token_base"]["address"].lower()
+                  and market_a["token_quote"]["address"].lower() == market_b["token_quote"]["address"].lower()
+                  and int(market_a["token_base"]["decimals"]) == int(market_b["token_base"]["decimals"])
+                  and int(market_a["token_quote"]["decimals"]) == int(market_b["token_quote"]["decimals"]))
+    if not compatible:
+        return [{"route":"DEX_DEX","market_a":market_a["id"],"market_b":market_b["id"],
+                 "status":"REJECTED","reason":"Markets are not same-chain and exact-token compatible"}]
+    gas = gas_cost_a_usdt + gas_cost_b_usdt if gas_cost_a_usdt is not None and gas_cost_b_usdt is not None else None
+    rows = []
+    for capital in capital_sizes_usdt:
+        quote_in = capital / quote_asset_usd_price
+        for source, destination, first, second in (
+            (market_a, market_b, a_quote_to_base, b_base_to_quote),
+            (market_b, market_a, b_quote_to_base, a_base_to_quote),
+        ):
+            quote_out = second(first(quote_in))
+            gross = (quote_out-quote_in)*quote_asset_usd_price
+            net = gross-gas if gas is not None else None
+            rows.append({"route":"DEX_DEX","market_a":source["id"],"market_b":destination["id"],
+                         "capital_usdt":capital,"gross_profit_usdt":gross,"gas_cost_usdt":gas,
+                         "net_profit_usdt":net,"roi_percent":net/capital*100 if net is not None else None,
+                         "capacity_usdt":None,"status":"VERIFIED" if net is not None else "INSUFFICIENT_DATA",
+                         "reason":None if net is not None else "One or both gas costs unavailable"})
     return rows
+
+
+def calculate_quote_capacity(quote_profit: Callable[[Decimal], Decimal], *,
+                             minimum_input: Decimal, maximum_input: Decimal,
+                             gas_cost: Decimal, tolerance: Decimal = Decimal("0.01"),
+                             max_iterations: int = 64) -> Decimal:
+    """Binary-search quote-derived positive-net capacity; not the largest profitable sample size."""
+    if minimum_input <= 0 or maximum_input < minimum_input or gas_cost < 0 or tolerance <= 0:
+        raise ValueError("Invalid capacity search bounds or costs")
+    if quote_profit(minimum_input) - gas_cost <= 0:
+        return Decimal(0)
+    if quote_profit(maximum_input) - gas_cost > 0:
+        return maximum_input
+    low, high = minimum_input, maximum_input
+    for _ in range(max_iterations):
+        if high-low <= tolerance:
+            break
+        mid = (low+high)/2
+        if quote_profit(mid)-gas_cost > 0:
+            low = mid
+        else:
+            high = mid
+    return low
+
+
+async def discover_dexscreener_pairs(query: str, allowed_chain_names: set[str],
+                                     minimum_liquidity_usd: Decimal = Decimal("10000"),
+                                     minimum_volume_24h_usd: Decimal = Decimal("10000")) -> list[dict[str, Any]]:
+    """DexScreener provides candidates only; it cannot certify V3 protocol version."""
+    timeout = aiohttp.ClientTimeout(total=20)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(DEXSCREENER_SEARCH, params={"q":query}) as response:
+            response.raise_for_status()
+            payload = await response.json()
+    results = []
+    for pair in payload.get("pairs") or []:
+        liquidity = _decimal((pair.get("liquidity") or {}).get("usd") or 0)
+        volume = _decimal((pair.get("volume") or {}).get("h24") or 0)
+        chain = str(pair.get("chainId") or "").lower()
+        if chain not in allowed_chain_names or liquidity < minimum_liquidity_usd or volume < minimum_volume_24h_usd:
+            continue
+        results.append({"chain":chain,"dex":pair.get("dexId"),"pair_address":pair.get("pairAddress"),
+                        "base_token":pair.get("baseToken"),"quote_token":pair.get("quoteToken"),
+                        "price_usd":pair.get("priceUsd"),"liquidity_usd":str(liquidity),
+                        "volume_24h_usd":str(volume),"url":pair.get("url"),
+                        "version":"UNKNOWN","status":"UNVERIFIED",
+                        "reason":"DexScreener metadata is discovery-only; verify V3 factory and pool on-chain"})
+    return sorted(results,key=lambda row:_decimal(row["liquidity_usd"]),reverse=True)
+
+
+def serialise(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value)
+    if hasattr(value, "__dataclass_fields__"):
+        return {key:serialise(item) for key,item in asdict(value).items()}
+    if isinstance(value, dict):
+        return {str(key):serialise(item) for key,item in value.items()}
+    if isinstance(value, (list,tuple)):
+        return [serialise(item) for item in value]
+    return value
+
+
+def write_reports(rows: list[dict[str, Any]], output_dir: str | Path, prefix: str = "arbiV3") -> tuple[Path,Path]:
+    target = Path(output_dir)
+    target.mkdir(parents=True,exist_ok=True)
+    json_path, csv_path = target/f"{prefix}.json", target/f"{prefix}.csv"
+    json_path.write_text(json.dumps(serialise(rows),indent=2,ensure_ascii=False),encoding="utf-8")
+    columns = sorted({key for row in rows for key in row})
+    with csv_path.open("w",newline="",encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle,fieldnames=columns)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key:json.dumps(serialise(value),ensure_ascii=False) if isinstance(value,(dict,list,tuple)) else serialise(value)
+                             for key,value in row.items()})
+    return json_path,csv_path
+
+
+def verify_market(market: dict[str, Any], chain: dict[str, Any]) -> tuple[V3PoolSnapshot,V3QuoterV2]:
+    rpc = os.getenv(chain["rpc_env"],"").strip()
+    if not rpc:
+        raise RuntimeError(f"RPC not configured: {chain['rpc_env']}")
+    w3 = Web3(Web3.HTTPProvider(rpc,request_kwargs={"timeout":20}))
+    if not w3.is_connected():
+        raise ConnectionError("RPC connectivity failed")
+    snapshot = V3PoolValidator(w3).validate(
+        expected_chain_id=int(chain["id"]),factory_address=market["factory"],
+        pool_address=market["pool"],token_a=market["token0"]["address"],
+        token_b=market["token1"]["address"],fee=int(market["fee"]))
+    quoter = V3QuoterV2(w3,market["quoter"])
+    probe_token = market.get("probe_token") or market["token0"]["address"]
+    probe_amount = _decimal(market.get("probe_amount","0.000001"))
+    quoter.validate_deployment(snapshot,probe_token,probe_amount)
+    return snapshot,quoter
