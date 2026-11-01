@@ -57,6 +57,7 @@ Set `TRADING_MODE=DRY_RUN` for safe observation. The bot refuses LIVE mode unles
 
 - The configured PlunderSwap V3 fee is expressed in V3 fee units (1,000,000 = 100%), not basis points. The default `100` corresponds to 0.01%; startup verifies it against the configured pool.
 - WZIL uses 18 decimals and zUSDT uses 6 decimals in the current configuration; verify on-chain.
+- The default per-size minimum-profit thresholds preserve the previous V3 strategy: 0.08, 0.18, 0.40 and 1.00 USDT for 5k, 10k, 15k and 25k ZIL respectively. The strategy prioritizes the largest size that passes all checks.
 - The KuCoin market order uses ZIL quantity. The implementation checks final order status and filled size rather than treating order acceptance as a completed fill.
 - Estimated network gas is converted to USDT using the current KuCoin ZIL bid. Gas cost uses the configured gas limit and multiplier, so treat it as a conservative estimate, not a guarantee of realized gas expenditure.
 - Market profitability uses best bid/ask and does not yet model full order-book depth or guarantee execution at those prices.
