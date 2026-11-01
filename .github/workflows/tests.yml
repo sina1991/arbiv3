@@ -19,6 +19,16 @@ jobs:
       - run: python -m compileall -q .
       - run: python -m pytest -q
       - run: python main.py --scan --output-dir /tmp/arbiV3-reports
+      - name: Multi-chain Uniswap V3 deployment smoke checks (read-only)
+        env:
+          ETHEREUM_RPC_URL: https://ethereum-rpc.publicnode.com
+          BSC_RPC_URL: https://bsc-rpc.publicnode.com
+          POLYGON_RPC_URL: https://polygon-bor-rpc.publicnode.com
+          ARBITRUM_RPC_URL: https://arbitrum-one-rpc.publicnode.com
+          BASE_RPC_URL: https://base-rpc.publicnode.com
+          OPTIMISM_RPC_URL: https://optimism-rpc.publicnode.com
+          AVALANCHE_RPC_URL: https://avalanche-c-chain-rpc.publicnode.com
+        run: python main.py --check-v3-deployments --output-dir /tmp/arbiV3-deployments
       - name: PlunderSwap V3 read-only deployment validation
         env:
           ZILLIQA_RPC_URL: https://public.moonlet.cloud/zilliqa
