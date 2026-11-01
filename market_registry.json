@@ -148,21 +148,21 @@
       "capacity_search_max_usdt": null,
       "slot0_fee_protocol_type": "uint32",
       "onchain_status": "VERIFIED",
-      "onchain_verified_at": "2026-11-01T18:30:43Z",
-      "onchain_verified_block": 39425568,
+      "onchain_verified_at": "2026-11-01T18:32:30Z",
+      "onchain_verified_block": 39425665,
       "onchain_probe_quotes": [
         {
           "direction": "zUSDT_to_WZIL",
           "amount_in": "0.01",
           "amount_out": "0.000697129281506808",
-          "block_number": 39425569,
+          "block_number": 39425667,
           "gas_estimate": 83302
         },
         {
           "direction": "WZIL_to_zUSDT",
           "amount_in": "0.01",
           "amount_out": "0.143416",
-          "block_number": 39425570,
+          "block_number": 39425668,
           "gas_estimate": 89966
         }
       ]
