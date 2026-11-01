@@ -10,10 +10,14 @@ from arbitrage import evaluate_opportunities
 from config import settings
 from kucoin_client import KuCoinClient
 from models import Direction
-from plunderswap_v3 import PlunderSwapV3, from_raw
+from plunderswap_v3 import PlunderSwapV3, PendingTransactionError, from_raw
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("arbiV3")
+
+
+class CriticalExecutionError(RuntimeError):
+    """Stop the process after one venue has executed and the hedge is uncertain."""
 
 
 async def notify(message: str) -> None:
@@ -143,21 +147,33 @@ async def run_cycle(dex: PlunderSwapV3, kucoin: KuCoinClient):
     if best.direction is Direction.BUY_WZIL_ON_DEX_SELL_ZIL_ON_CEX:
         tx_hash = await asyncio.to_thread(dex.execute_swap, "BUY_WZIL", amount_in, amount_out)
         logger.warning("V3 buy WZIL confirmed on-chain: %s", tx_hash)
-        result = await kucoin.market_order_and_verify("sell", best.zil_size)
+        cex_side = "sell"
     else:
         tx_hash = await asyncio.to_thread(dex.execute_swap, "SELL_WZIL", amount_in, amount_out)
         logger.warning("V3 sell WZIL confirmed on-chain: %s", tx_hash)
-        result = await kucoin.market_order_and_verify("buy", best.zil_size)
+        cex_side = "buy"
+
+    try:
+        result = await kucoin.market_order_and_verify(cex_side, best.zil_size)
+    except Exception as exc:
+        message = (
+            f"arbiV3 CRITICAL: DEX transaction {tx_hash} is confirmed but KuCoin hedge "
+            f"failed or is uncertain ({exc}). Trading halted; reconcile balances before restart."
+        )
+        logger.critical(message)
+        await notify(message)
+        raise CriticalExecutionError(message) from exc
 
     logger.info("KuCoin execution result: %s", result)
     if not result["fully_filled"]:
         message = (
-            f"arbiV3 WARNING: partial KuCoin fill after DEX transaction. "
+            f"arbiV3 CRITICAL: partial KuCoin fill after DEX transaction. "
             f"requested={result['requested_size']} filled={result['filled_size']} "
-            f"DEX_tx={tx_hash}. Inventory may be unbalanced."
+            f"DEX_tx={tx_hash}. Trading halted; inventory may be unbalanced."
         )
-        logger.error(message)
+        logger.critical(message)
         await notify(message)
+        raise CriticalExecutionError(message)
     else:
         await notify(
             f"arbiV3 LIVE trade completed. route={best.direction.value}, "
@@ -180,6 +196,10 @@ async def main():
                 await run_cycle(dex, kucoin)
             except asyncio.CancelledError:
                 raise
+            except (PendingTransactionError, CriticalExecutionError) as exc:
+                logger.critical("Trading halted for manual reconciliation: %s", exc)
+                await notify(f"arbiV3 HALTED: {exc}")
+                break
             except Exception:
                 logger.exception("Cycle failed; no new trade will be attempted in this cycle")
             await asyncio.sleep(settings.check_interval)
