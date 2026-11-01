@@ -325,7 +325,8 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
                      base_to_quote: Callable[[Decimal], Decimal],
                      cex_bid: Decimal, cex_ask: Decimal, cex_fee_rate: Decimal,
                      quote_asset_usd_price: Decimal, gas_cost_usdt: Decimal | None,
-                     status: str, asset_mapping_verified: bool, capacity_search_max_usdt: Decimal | None = None) -> list[dict[str, Any]]:
+                     status: str, asset_mapping_verified: bool, capacity_search_max_usdt: Decimal | None = None,
+                     usd_prices_verified: bool = False, cex_depth_verified: bool = False) -> list[dict[str, Any]]:
     if status != "VERIFIED" or not asset_mapping_verified:
         return [{"route":"DEX_CEX","market_a":market_id,"status":"UNVERIFIED",
                  "reason":"V3 market or CEX asset mapping is not verified"}]
@@ -333,6 +334,9 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
         raise ValueError("Invalid CEX prices or quote asset conversion")
     if not 0 <= cex_fee_rate < 1:
         raise ValueError("Invalid CEX fee rate")
+    if not usd_prices_verified or not cex_depth_verified:
+        return [{"route":"DEX_CEX","market_a":market_id,"status":"INSUFFICIENT_DATA",
+                 "reason":"Verified USD conversion and CEX order-book depth are required"}]
     capital_sizes = tuple(capital_sizes_usdt)
     rows = []
     for capital in capital_sizes:
@@ -372,7 +376,8 @@ def evaluate_dex_dex(*, market_a: dict[str, Any], market_b: dict[str, Any],
                      b_quote_to_base: Callable[[Decimal], Decimal],
                      b_base_to_quote: Callable[[Decimal], Decimal],
                      quote_asset_usd_price: Decimal,
-                     gas_cost_a_usdt: Decimal | None, gas_cost_b_usdt: Decimal | None, capacity_search_max_usdt: Decimal | None = None) -> list[dict[str, Any]]:
+                     gas_cost_a_usdt: Decimal | None, gas_cost_b_usdt: Decimal | None, capacity_search_max_usdt: Decimal | None = None,
+                     usd_prices_verified: bool = False) -> list[dict[str, Any]]:
     compatible = (market_a["chain_id"] == market_b["chain_id"]
                   and market_a["token_base"]["address"].lower() == market_b["token_base"]["address"].lower()
                   and market_a["token_quote"]["address"].lower() == market_b["token_quote"]["address"].lower()
@@ -381,6 +386,9 @@ def evaluate_dex_dex(*, market_a: dict[str, Any], market_b: dict[str, Any],
     if not compatible:
         return [{"route":"DEX_DEX","market_a":market_a["id"],"market_b":market_b["id"],
                  "status":"REJECTED","reason":"Markets are not same-chain and exact-token compatible"}]
+    if not usd_prices_verified:
+        return [{"route":"DEX_DEX","market_a":market_a["id"],"market_b":market_b["id"],
+                 "status":"INSUFFICIENT_DATA","reason":"Verified USD conversion for the common quote token is required"}]
     gas = gas_cost_a_usdt + gas_cost_b_usdt if gas_cost_a_usdt is not None and gas_cost_b_usdt is not None else None
     capital_sizes = tuple(capital_sizes_usdt)
     rows = []
