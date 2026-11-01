@@ -329,8 +329,9 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
         raise ValueError("Invalid CEX prices or quote asset conversion")
     if not 0 <= cex_fee_rate < 1:
         raise ValueError("Invalid CEX fee rate")
+    capital_sizes = tuple(capital_sizes_usdt)
     rows = []
-    for capital in capital_sizes_usdt:
+    for capital in capital_sizes:
         quote_in = capital / quote_asset_usd_price
         # Buy base on V3, sell base on CEX.
         base_out = quote_to_base(quote_in)
@@ -410,11 +411,19 @@ def calculate_quote_capacity(quote_profit: Callable[[Decimal], Decimal], *,
     """Binary-search quote-derived positive-net capacity; not the largest profitable sample size."""
     if minimum_input <= 0 or maximum_input < minimum_input or gas_cost < 0 or tolerance <= 0:
         raise ValueError("Invalid capacity search bounds or costs")
-    if quote_profit(minimum_input) - gas_cost <= 0:
+    # Profitability need not be monotonic: fixed gas can make small sizes
+    # unprofitable while larger sizes become profitable. Find the last
+    # profitable interval using real quote callbacks, then refine its boundary.
+    samples = 256
+    grid = [minimum_input + (maximum_input-minimum_input)*Decimal(i)/Decimal(samples)
+            for i in range(samples+1)]
+    profitable = [i for i, amount in enumerate(grid) if quote_profit(amount)-gas_cost > 0]
+    if not profitable:
         return Decimal(0)
-    if quote_profit(maximum_input) - gas_cost > 0:
+    index = profitable[-1]
+    if index == samples:
         return maximum_input
-    low, high = minimum_input, maximum_input
+    low, high = grid[index], grid[index+1]
     for _ in range(max_iterations):
         if high-low <= tolerance:
             break
