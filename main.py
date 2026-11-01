@@ -43,6 +43,7 @@ async def run_cycle(dex: PlunderSwapV3, kucoin: KuCoinClient):
         settings.kucoin_fee_rate, settings.min_profit_usdt, gas_cost,
     )
     balances = await asyncio.to_thread(dex.balances)
+    allowances = await asyncio.to_thread(dex.allowances)
     logger.info(
         "Mode=%s | KuCoin bid/ask=%s/%s | V3 wallet WZIL=%s zUSDT=%s native ZIL=%s",
         settings.trading_mode, bid, ask, balances["wzil"], balances["zusdt"], balances["native_zil"]
@@ -58,8 +59,43 @@ async def run_cycle(dex: PlunderSwapV3, kucoin: KuCoinClient):
         logger.info("DRY_RUN: no transaction signing/broadcast and no KuCoin order submission.")
         return
 
-    candidates = [item for item in opportunities if item.executable]
+    cex_balances = await kucoin.account_balances()
+    candidates = []
+    for item in opportunities:
+        if not item.executable:
+            continue
+        gas_zil_required = (gas_cost / bid) if bid > 0 else Decimal("Infinity")
+        if balances["native_zil"] < gas_zil_required:
+            logger.warning("Skip %s: insufficient native ZIL for estimated gas", item.direction.value)
+            continue
+        if item.direction is Direction.BUY_WZIL_ON_DEX_SELL_ZIL_ON_CEX:
+            amount_in, amount_out = await asyncio.to_thread(dex.quote_buy_wzil, item.zil_size)
+            required_stable = from_raw(amount_in, settings.zusdt_decimals)
+            if balances["zusdt"] < required_stable:
+                logger.warning("Skip %s: insufficient zUSDT on PlunderSwap wallet", item.direction.value)
+                continue
+            if allowances["zusdt"] < amount_in:
+                logger.warning("Skip %s: zUSDT allowance for V3 router is insufficient", item.direction.value)
+                continue
+            if cex_balances.get("ZIL", Decimal("0")) < item.zil_size:
+                logger.warning("Skip %s: insufficient available ZIL on KuCoin", item.direction.value)
+                continue
+        else:
+            amount_in, amount_out = await asyncio.to_thread(dex.quote_sell_wzil, item.zil_size)
+            if balances["wzil"] < item.zil_size:
+                logger.warning("Skip %s: insufficient WZIL on PlunderSwap wallet", item.direction.value)
+                continue
+            if allowances["wzil"] < amount_in:
+                logger.warning("Skip %s: WZIL allowance for V3 router is insufficient", item.direction.value)
+                continue
+            required_usdt = item.zil_size * ask * (Decimal("1") + settings.kucoin_fee_rate)
+            if cex_balances.get("USDT", Decimal("0")) < required_usdt:
+                logger.warning("Skip %s: insufficient available USDT on KuCoin", item.direction.value)
+                continue
+        candidates.append(item)
+
     if not candidates:
+        logger.info("No profitable opportunity passed balance, allowance and gas checks.")
         return
     best = candidates[0]
     if best.direction is Direction.BUY_WZIL_ON_DEX_SELL_ZIL_ON_CEX:
