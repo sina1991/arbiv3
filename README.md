@@ -45,6 +45,7 @@ Validate a configured V3 market's RPC, chain ID, factory getPool mapping, pool f
 
 ```bash
 python main.py --validate plunderswap_v3_wzil_zusdt_reference
+python main.py --check-networks
 ```
 
 Validation outputs are written to `reports/` in JSON and CSV. A successful deployment probe alone does not prove token USD parity, gas conversion, CEX mapping or economic profitability.
