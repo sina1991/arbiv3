@@ -45,12 +45,14 @@ class Settings:
     trade_sizes_zil: tuple[Decimal, ...] = tuple(
         Decimal(x.strip()) for x in os.getenv("TRADE_SIZES_ZIL", "5000,10000,15000,25000").split(",") if x.strip()
     )
-    min_profit_usdt: Decimal = _decimal("MIN_PROFIT_USDT", "0.20")
+    min_profit_by_size: tuple[Decimal, ...] = tuple(
+        Decimal(x.strip()) for x in os.getenv("MIN_PROFIT_USDT_BY_SIZE", "0.08,0.18,0.40,1.0").split(",") if x.strip()
+    )
     slippage_bps: int = _int("SLIPPAGE_BPS", "30")
     check_interval: int = _int("CHECK_INTERVAL_SECONDS", "6")
     max_price_age: int = _int("MAX_PRICE_AGE_SECONDS", "5")
     gas_limit: int = _int("GAS_LIMIT", "450000")
-    gas_multiplier: Decimal = _decimal("GAS_MULTIPLIER", "1.5")
+    gas_multiplier: Decimal = _decimal("GAS_MULTIPLIER", "2.0")
 
     telegram_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
@@ -75,6 +77,13 @@ class Settings:
             raise ValueError("Gas limit and multiplier must be positive")
         if not self.trade_sizes_zil or any(size <= 0 for size in self.trade_sizes_zil):
             raise ValueError("TRADE_SIZES_ZIL must contain positive amounts")
+        if len(self.min_profit_by_size) != len(self.trade_sizes_zil):
+            raise ValueError("MIN_PROFIT_USDT_BY_SIZE must contain one threshold per trade size")
+        if any(value < 0 for value in self.min_profit_by_size):
+            raise ValueError("Profit thresholds cannot be negative")
+
+    def profit_threshold(self, size: Decimal) -> Decimal:
+        return dict(zip(self.trade_sizes_zil, self.min_profit_by_size))[size]
 
 
 settings = Settings()
