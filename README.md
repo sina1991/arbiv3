@@ -2,14 +2,12 @@
 
 A standalone ZIL-USDT cross-exchange arbitrage bot using **PlunderSwap V3 only** and KuCoin spot markets.
 
-## Scope
+## Supported market and routes
 
 - DEX market: WZIL / zUSDT on the configured PlunderSwap V3 pool.
 - CEX market: ZIL-USDT on KuCoin.
-- Supported routes:
-  - Buy WZIL on PlunderSwap V3 (exact output), sell ZIL on KuCoin.
-  - Buy ZIL on KuCoin, sell WZIL on PlunderSwap V3 (exact input).
-- No V2 implementation, V2 pool, WZIL/zUSDC market, reserve-based quote math, or V2 ABI is part of this repository.
+- Buy WZIL on PlunderSwap V3 (exact output), then sell ZIL on KuCoin.
+- Buy ZIL on KuCoin, then sell WZIL on PlunderSwap V3 (exact input).
 
 ## Safety modes
 
@@ -43,7 +41,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Fill in the RPC endpoint, KuCoin credentials, wallet address, and (only for LIVE) private key. Never commit `.env`.
+Fill in the RPC endpoint, KuCoin credentials, and wallet address. The wallet private key is only required for LIVE mode. Never commit `.env`.
 
 ## Run
 
@@ -55,10 +53,11 @@ Set `TRADING_MODE=DRY_RUN` for safe observation. The bot refuses LIVE mode unles
 
 ## Configuration notes
 
-- The configured PlunderSwap V3 fee is expressed in Uniswap-style fee units (1,000,000 = 100%), not basis points. The default `100` corresponds to 0.01%; verify this against the deployed pool before use.
+- The configured PlunderSwap V3 fee is expressed in V3 fee units (1,000,000 = 100%), not basis points. The default `100` corresponds to 0.01%; startup verifies it against the configured pool.
 - WZIL uses 18 decimals and zUSDT uses 6 decimals in the current configuration; verify on-chain.
 - The KuCoin market order uses ZIL quantity. The implementation checks final order status and filled size rather than treating order acceptance as a completed fill.
-- Profit estimates include configured KuCoin fee and estimated PlunderSwap gas converted to USDT only when a gas-to-USDT estimate is configured. If unavailable, the bot marks gas-adjusted profit as incomplete and will not call the estimate guaranteed net profit.
+- Estimated network gas is converted to USDT using the current KuCoin ZIL bid. Gas cost uses the configured gas limit and multiplier, so treat it as a conservative estimate, not a guarantee of realized gas expenditure.
+- Market profitability uses best bid/ask and does not yet model full order-book depth or guarantee execution at those prices.
 
 ## Tests
 
