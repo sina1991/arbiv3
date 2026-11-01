@@ -101,3 +101,30 @@ def test_ranking_uses_profit_roi_and_max_profitable_budget():
 def test_decimal_parser_handles_missing_api_fields():
     assert _decimal(None) == D("0")
     assert _decimal("12.5") == D("12.5")
+
+
+def test_non_usdt_quote_asset_requires_explicit_conversion_rate():
+    candidate = PoolCandidate(
+        chain="zilliqa",
+        pool_address="0xzpool",
+        dex_id="plunder",
+        dex_name="PlunderSwap",
+        base_token=Token("zilliqa", "0xwzil", "WZIL", decimals=18),
+        quote_token=Token("zilliqa", "0xzusdt", "zUSDT", decimals=6),
+        liquidity_usd=D("100000"),
+        volume_24h_usd=D("50000"),
+        price_usd=D("0.001"),
+    )
+    book = OrderBook(
+        bids=((D("0.001"), D("100000")),),
+        asks=((D("0.0011"), D("100000")),),
+        observed_at=1.0,
+    )
+    quote = lambda token_in, token_out, amount: amount
+    assert evaluate_dex_cex(candidate, quote, book, (D("100"),), D("0"), D("0")) == []
+    # Explicit depeg-aware conversion is required; zUSDT is not silently treated as USDT.
+    rows = evaluate_dex_cex(
+        candidate, quote, book, (D("100"),), D("0"), D("0"),
+        quote_to_usdt_rate=D("0.98"),
+    )
+    assert len(rows) == 2
