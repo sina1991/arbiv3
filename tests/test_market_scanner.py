@@ -63,9 +63,9 @@ def test_unverified_asset_mapping_is_never_compared():
 
 
 def test_dex_dex_rejects_cross_chain_or_nonidentical_token_contracts():
-    a={"id":"a","chain_id":1,"token_base":{"address":"0x"+"11"*20,"decimals":18},
+    a={"id":"a","chain_id":1,"status":"VERIFIED","enabled":True,"token_base":{"address":"0x"+"11"*20,"decimals":18},
        "token_quote":{"address":"0x"+"22"*20,"decimals":6}}
-    b={"id":"b","chain_id":56,"token_base":{"address":"0x"+"11"*20,"decimals":18},
+    b={"id":"b","chain_id":56,"status":"VERIFIED","enabled":True,"token_base":{"address":"0x"+"11"*20,"decimals":18},
        "token_quote":{"address":"0x"+"22"*20,"decimals":6}}
     rows=evaluate_dex_dex(market_a=a,market_b=b,capital_sizes_usdt=[D("100")],
         a_quote_to_base=lambda x:x,a_base_to_quote=lambda x:x,
@@ -77,7 +77,7 @@ def test_dex_dex_rejects_cross_chain_or_nonidentical_token_contracts():
 def test_dex_dex_unknown_one_leg_gas_is_insufficient_data():
     a={"id":"a","chain_id":1,"token_base":{"address":"0x"+"11"*20,"decimals":18},
        "token_quote":{"address":"0x"+"22"*20,"decimals":6}}
-    b={"id":"b","chain_id":1,"token_base":{"address":"0x"+"11"*20,"decimals":18},
+    b={"id":"b","chain_id":1,"status":"VERIFIED","enabled":True,"token_base":{"address":"0x"+"11"*20,"decimals":18},
        "token_quote":{"address":"0x"+"22"*20,"decimals":6}}
     rows=evaluate_dex_dex(market_a=a,market_b=b,capital_sizes_usdt=[D("100")],
         a_quote_to_base=lambda x:x/D("10"),a_base_to_quote=lambda x:x*D("10"),
