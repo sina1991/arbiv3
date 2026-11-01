@@ -25,7 +25,9 @@ ERC20_ABI = [
 FACTORY_ABI = [
     {"type":"function","name":"getPool","stateMutability":"view",
      "inputs":[{"name":"tokenA","type":"address"},{"name":"tokenB","type":"address"},{"name":"fee","type":"uint24"}],
-     "outputs":[{"name":"pool","type":"address"}]}
+     "outputs":[{"name":"pool","type":"address"}]},
+    {"type":"function","name":"feeAmountTickSpacing","stateMutability":"view",
+     "inputs":[{"name":"fee","type":"uint24"}],"outputs":[{"name":"tickSpacing","type":"int24"}]}
 ]
 POOL_ABI = [
     {"type":"function","name":"factory","stateMutability":"view","inputs":[],"outputs":[{"type":"address"}]},
@@ -145,8 +147,9 @@ class V3PoolValidator:
         if actual_fee != int(fee):
             raise ValueError(f"Pool fee mismatch: configured {fee}, on-chain {actual_fee}")
         spacing = int(pool.functions.tickSpacing().call())
-        if spacing <= 0:
-            raise ValueError("Pool tickSpacing is invalid")
+        factory_spacing = int(factory.functions.feeAmountTickSpacing(int(fee)).call())
+        if spacing <= 0 or factory_spacing <= 0 or spacing != factory_spacing:
+            raise ValueError("Pool tickSpacing does not match the Factory fee tier configuration")
         token0_contract = self.w3.eth.contract(address=token0, abi=ERC20_ABI)
         token1_contract = self.w3.eth.contract(address=token1, abi=ERC20_ABI)
         decimals0 = int(token0_contract.functions.decimals().call())
@@ -554,6 +557,12 @@ def verify_market(market: dict[str, Any], chain: dict[str, Any]) -> tuple[V3Pool
         expected_chain_id=int(chain["id"]),factory_address=market["factory"],
         pool_address=market["pool"],token_a=market["token0"]["address"],
         token_b=market["token1"]["address"],fee=int(market["fee"]))
+    configured_decimals = {market["token0"]["address"].lower():int(market["token0"]["decimals"]),
+                           market["token1"]["address"].lower():int(market["token1"]["decimals"])}
+    actual_decimals = {snapshot.token0.lower():snapshot.token0_decimals,
+                       snapshot.token1.lower():snapshot.token1_decimals}
+    if configured_decimals != actual_decimals:
+        raise ValueError("Configured token decimals do not match on-chain ERC-20 decimals")
     quoter = V3QuoterV2(w3,market["quoter"])
     probe_token = market.get("probe_token") or market["token0"]["address"]
     probe_amount = _decimal(market.get("probe_amount","0.000001"))
