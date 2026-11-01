@@ -35,7 +35,7 @@ def evaluate_opportunities(
         if sell_proceeds is not None:
             cex_cost = size * kucoin_ask * (Decimal("1") + kucoin_fee)
             raw_profit = sell_proceeds - cex_cost
-            net_profit = raw_profit - gas_cost_usdt if gas_cost_usdt is not None else raw_profit
+            net_profit = raw_profit - gas_cost_usdt if gas_cost_usdt is not None else None
             complete = gas_cost_usdt is not None
             opportunities.append(Opportunity(
                 Direction.BUY_ZIL_ON_CEX_SELL_WZIL_ON_DEX, size, Decimal("0"),
