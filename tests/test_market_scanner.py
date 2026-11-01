@@ -1,4 +1,5 @@
 from decimal import Decimal as D
+import json
 
 import pytest
 from web3 import Web3
@@ -225,3 +226,29 @@ def test_quoter_v2_mock_returns_v3_quote_context():
     assert quote.gas_estimate==150_000
     assert quote.fee_units==500
     assert quote.block_number==123
+
+
+def test_registry_rejects_v2_adapter(tmp_path):
+    data=load_registry()
+    data["markets"][0]["version"]="V2"
+    path=tmp_path/"registry.json"
+    path.write_text(json.dumps(data),encoding="utf-8")
+    with pytest.raises(ValueError,match="Only V3"):
+        load_registry(path)
+
+
+def test_registry_rejects_duplicate_pool_on_same_chain(tmp_path):
+    data=load_registry()
+    duplicate=dict(data["markets"][0])
+    duplicate["id"]="duplicate"
+    data["markets"].append(duplicate)
+    path=tmp_path/"registry.json"
+    path.write_text(json.dumps(data),encoding="utf-8")
+    with pytest.raises(ValueError,match="Duplicate V3 pool"):
+        load_registry(path)
+
+
+def test_capacity_search_does_not_hide_rpc_errors():
+    with pytest.raises(ConnectionError):
+        calculate_quote_capacity(lambda amount: (_ for _ in ()).throw(ConnectionError("RPC down")),
+            minimum_input=D("1"),maximum_input=D("10"),gas_cost=D("1"))
