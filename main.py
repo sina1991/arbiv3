@@ -13,6 +13,7 @@ from market_scanner import (
     CAPITAL_SIZES_USDT, discover_dexscreener_pairs, load_registry,
     quote_capital_grid, serialise, verify_market, verify_network_connectivity, write_reports,
 )
+from scan_engine import scan_registry
 
 logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
 log=logging.getLogger("arbiV3")
@@ -28,6 +29,7 @@ async def run() -> None:
     parser.add_argument("--token0-usd-price",default=None,help="Independently sourced USD price for market token0")
     parser.add_argument("--token1-usd-price",default=None,help="Independently sourced USD price for market token1")
     parser.add_argument("--check-networks",action="store_true",help="Check configured RPC connectivity and chain IDs")
+    parser.add_argument("--scan",action="store_true",help="Run enabled, verified V3 markets through quotes and arbitrage evaluation")
     parser.add_argument("--output-dir",default="reports")
     args=parser.parse_args()
     registry=load_registry(args.registry)
@@ -42,6 +44,13 @@ async def run() -> None:
         json_path,csv_path=write_reports(candidates,args.output_dir,"discovery_candidates")
         print(json.dumps(candidates,indent=2,ensure_ascii=False))
         log.info("Discovery-only candidates: %d | %s | %s",len(candidates),json_path,csv_path)
+        return
+
+    if args.scan:
+        report=await scan_registry(registry,chains,args.output_dir)
+        print(json.dumps(report,indent=2,ensure_ascii=False))
+        log.info("V3 scan status: %s | verified markets: %s | ranked opportunities: %s",
+                 report["status"],report["verified_market_count"],len(report["ranked_opportunities"]))
         return
 
     if args.check_networks:
