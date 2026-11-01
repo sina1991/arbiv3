@@ -120,7 +120,7 @@
       "estimated_round_trip_gas_usdt": null,
       "enabled": false,
       "status": "UNVERIFIED",
-      "disabled_reason": "Official factory and QuoterV2 addresses are documented, but current RPC connectivity, factory-to-pool mapping, pool state, ABI probe quotes and WZIL/ZIL mapping have not yet been independently validated on-chain.",
+      "disabled_reason": "On-chain V3 Factory, Pool, token ordering/decimals, fee tier, tick spacing, slot0 ABI, liquidity and bidirectional QuoterV2 probes are verified. Remains disabled because WZIL-to-KuCoin-ZIL asset mapping, verified token USD prices, CEX fee, native-token USD gas conversion and liquidity-backed capacity bound are not verified.",
       "probe_token": "0x2274005778063684fbB1BfA96a2b725dc37d75f9",
       "probe_amount": "0.01",
       "deployment_source": "https://docs.plunderswap.com/developers/",
@@ -143,7 +143,26 @@
       "gas_safety_multiplier": "1.2",
       "slippage_bps": 30,
       "capacity_search_max_usdt": null,
-      "slot0_fee_protocol_type": "uint32"
+      "slot0_fee_protocol_type": "uint32",
+      "onchain_status": "VERIFIED",
+      "onchain_verified_at": "2026-11-01T18:30:43Z",
+      "onchain_verified_block": 39425568,
+      "onchain_probe_quotes": [
+        {
+          "direction": "zUSDT_to_WZIL",
+          "amount_in": "0.01",
+          "amount_out": "0.000697129281506808",
+          "block_number": 39425569,
+          "gas_estimate": 83302
+        },
+        {
+          "direction": "WZIL_to_zUSDT",
+          "amount_in": "0.01",
+          "amount_out": "0.143416",
+          "block_number": 39425570,
+          "gas_estimate": 89966
+        }
+      ]
     }
   ]
 }
