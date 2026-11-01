@@ -36,4 +36,5 @@ def test_missing_gas_cost_never_marks_opportunity_executable():
         kucoin_fee=D("0"), minimum_profit=D("0.01"), gas_cost_usdt=None,
     )
     assert not rows[0].executable
+    assert rows[0].estimated_profit_usdt is None
     assert "gas conversion unavailable" in rows[0].reason
