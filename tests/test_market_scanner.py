@@ -291,7 +291,7 @@ def test_v3_deployment_checker_does_not_claim_unconfigured_chain_support():
     from market_scanner import verify_v3_deployments
     rows=verify_v3_deployments([{"id":32769,"name":"zilliqa"}])
     assert rows==[{"chain":"zilliqa","chain_id":32769,"status":"NOT_CONFIGURED",
-                   "reason":"No official Uniswap V3 deployment configured for this chain."}]
+                   "reason":"No official Uniswap V3 deployment configured for this chain"}]
 
 
 def test_v3_candidate_discovery_marks_missing_chain_deployment():
