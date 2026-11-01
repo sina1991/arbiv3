@@ -184,6 +184,12 @@ async def scan_registry(registry: dict[str, Any], chains: dict[int, dict[str, An
                     row["price_impact_bps"] = sum(impacts,Decimal(0))
                     row["pool_liquidity_a"] = first_q.get("pool_liquidity") if first_q else None
                     row["pool_liquidity_b"] = second_q.get("pool_liquidity") if second_q else None
+                    row["fee_units_a"] = first_market["fee"]
+                    row["fee_units_b"] = second_market["fee"]
+                    row["tick_before_a"] = first_q.get("tick_before") if first_q else None
+                    row["tick_before_b"] = second_q.get("tick_before") if second_q else None
+                    row["block_number_a"] = first_q.get("block_number") if first_q else None
+                    row["block_number_b"] = second_q.get("block_number") if second_q else None
             opportunity_rows.extend(route_rows)
         except Exception as exc:
             opportunity_rows.append({"route":"DEX_DEX","market_a":ma["id"],"market_b":mb["id"],
