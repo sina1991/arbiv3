@@ -1,5 +1,9 @@
 from decimal import Decimal as D
+
+import pytest
+
 from arbitrage import evaluate_opportunities
+from config import Settings
 from models import Direction
 
 
@@ -19,7 +23,23 @@ def test_buy_dex_sell_cex_profit_includes_both_fees_and_gas():
     assert rows[0].executable
 
 
-def test_no_gas_conversion_means_not_executable():
+def test_buy_cex_sell_dex_profit_includes_both_fees_and_gas():
+    rows = evaluate_opportunities(
+        sizes=(D("100"),),
+        dex_exact_input_sell={D("100"): D("10.5")},
+        dex_exact_output_buy={},
+        kucoin_bid=D("0.1"),
+        kucoin_ask=D("0.1"),
+        kucoin_fee=D("0.001"),
+        minimum_profit=D("0.01"),
+        gas_cost_usdt=D("0.02"),
+    )
+    assert rows[0].direction is Direction.BUY_ZIL_ON_CEX_SELL_WZIL_ON_DEX
+    assert rows[0].estimated_profit_usdt == D("0.47")
+    assert rows[0].executable
+
+
+def test_missing_gas_cost_never_marks_trade_executable():
     rows = evaluate_opportunities(
         sizes=(D("100"),),
         dex_exact_input_sell={D("100"): D("10.5")},
@@ -32,3 +52,21 @@ def test_no_gas_conversion_means_not_executable():
     )
     assert not rows[0].executable
     assert "gas conversion unavailable" in rows[0].reason
+
+
+def test_dry_run_does_not_require_private_keys():
+    Settings(trading_mode="DRY_RUN", wallet_address="0x0000000000000000000000000000000000000001").validate()
+
+
+def test_live_requires_explicit_confirmation():
+    candidate = Settings(
+        trading_mode="LIVE",
+        live_confirmation="",
+        wallet_address="0x0000000000000000000000000000000000000001",
+        wallet_private_key="placeholder",
+        kucoin_key="key",
+        kucoin_secret="secret",
+        kucoin_passphrase="passphrase",
+    )
+    with pytest.raises(RuntimeError, match="LIVE mode blocked"):
+        candidate.validate()
