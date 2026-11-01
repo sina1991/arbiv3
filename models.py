@@ -24,7 +24,7 @@ class Opportunity:
     dex_output_usdt: Decimal
     kucoin_buy_cost_usdt: Decimal
     kucoin_sell_proceeds_usdt: Decimal
-    estimated_profit_usdt: Decimal
+    estimated_profit_usdt: Decimal | None
     gas_cost_usdt: Decimal | None
     executable: bool
     reason: str
