@@ -1,4 +1,5 @@
 from decimal import Decimal as D
+import asyncio
 import json
 
 import pytest
@@ -252,3 +253,14 @@ def test_capacity_search_does_not_hide_rpc_errors():
     with pytest.raises(ConnectionError):
         calculate_quote_capacity(lambda amount: (_ for _ in ()).throw(ConnectionError("RPC down")),
             minimum_input=D("1"),maximum_input=D("10"),gas_cost=D("1"))
+
+
+def test_integrated_scan_emits_reports_without_enabled_markets(tmp_path):
+    from scan_engine import scan_registry
+    registry=load_registry()
+    chains={int(chain["id"]):chain for chain in registry["chains"]}
+    report=asyncio.run(scan_registry(registry,chains,str(tmp_path)))
+    assert report["status"]=="INSUFFICIENT_DATA"
+    assert report["verified_market_count"]==0
+    assert (tmp_path/"scan_report.json").exists()
+    assert (tmp_path/"scan_report.csv").exists()
