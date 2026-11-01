@@ -1,21 +1,21 @@
-# arbiV3 — Multi-market DRY_RUN scanner
+# arbiV3 — V3-only multi-chain arbitrage research scanner
 
-arbiV3 is a read-only research tool for evaluating DEX-CEX and DEX-DEX arbitrage candidates across multiple EVM networks. The original WZIL/zUSDT PlunderSwap V3 market is retained as a reference, not assumed to be valid.
+arbiV3 is a **Uniswap V3 / V3-compatible concentrated-liquidity** arbitrage scanner. Its core supports V3 factories, V3 pools, fee tiers, tick state and QuoterV2. V2 constant-product pools, reserve-based quoting and hybrid V2/V3 routing are explicitly out of scope.
 
-## Fixed research configuration
+## Safety and operating mode
 
-- Capital test sizes: 100, 250, 500, 1,000, 2,500 and 5,000 USDT.
-- Comparison routes: DEX-CEX and DEX-DEX.
-- Chain registry: Zilliqa EVM, Ethereum, BNB Chain, Polygon, Arbitrum, Base, Optimism and Avalanche.
-- Discovery source: DexScreener public search API.
-- Quote adapters: UniswapV2-compatible constant-product pools and explicitly configured UniswapV3-compatible QuoterV2 contracts.
-- Ranking weights: 45% net profit, 35% ROI and 20% maximum profitable capital capacity.
+- Read-only: no transaction signing, broadcasting, approvals or exchange orders.
+- KuCoin integration is public market data only.
+- Never enable a market without validating its chain, factory, pool, token metadata, fee, QuoterV2 ABI/deployment and successful quotes.
+- DexScreener is discovery-only. Candidate pairs remain `UNVERIFIED` until checked on-chain.
+- Unknown gas, token USD price, CEX asset mapping or liquidity capacity means no net profit and no ranking.
+- Cross-chain opportunities are excluded unless a separately validated bridge/inventory model is added.
 
-## Read-only guarantee
+## Networks
 
-This project has no transaction signing, transaction broadcast, token approval, private exchange API, or order-submission implementation. It does not need a wallet private key or KuCoin API credentials. KuCoin access is limited to public ticker data.
+The registry contains Zilliqa EVM (32769), Ethereum (1), BNB Chain (56), Polygon (137), Arbitrum (42161), Base (8453), Optimism (10) and Avalanche (43114). Registry presence does not mean operational support. Each chain requires working RPC and matching chain ID, then separately verified V3 deployments.
 
-## Setup
+## Install
 
 Python 3.11+:
 
@@ -26,32 +26,41 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-## Inspect configured markets
+## Commands
+
+Inspect registry and emit JSON/CSV reports:
 
 ```bash
 python main.py
 ```
 
-## Discover candidate pools
-
-For example:
+Discover candidate markets (not verified or rankable):
 
 ```bash
 python main.py --discover USDT
 python main.py --discover USDC --min-liquidity 25000 --min-volume 50000
 ```
 
-Discovery output is a candidate list only. It is not an on-chain validation and is not an arbitrage ranking. Verify chain ID, pool bytecode, token addresses and decimals, token ordering, fee, liquidity/reserves, quote adapter deployment, and the corresponding CEX asset mapping before enabling a market.
+Validate a configured V3 market's RPC, chain ID, factory getPool mapping, pool factory/token ordering/fee/tickSpacing/slot0/liquidity, ERC-20 decimals, QuoterV2 bytecode and bidirectional probe quotes:
 
-## Market registry and quote adapters
+```bash
+python main.py --validate plunderswap_v3_wzil_zusdt_reference
+```
 
-See [README_MULTIMARKET.md](README_MULTIMARKET.md) and [market_registry.json](market_registry.json). V2 fees use basis points. V3 fees use the pool's uint24 fee units. They are deliberately separate to avoid the common 100-versus-100-bps configuration error.
+Validation outputs are written to `reports/` in JSON and CSV. A successful deployment probe alone does not prove token USD parity, gas conversion, CEX mapping or economic profitability.
 
-A V3 market requires a verified QuoterV2 address and compatible ABI. The scanner does not use the swap Router for quotes. Unknown gas cost is never treated as zero: an opportunity without a configured/derived gas estimate is excluded from net-profit ranking.
+## V3 architecture
 
-## Current WZIL/zUSDT reference
+- `V3PoolValidator`: chain ID, deployed contracts, Factory.getPool, pool.factory, token0/token1, decimals, fee, tickSpacing, slot0, active liquidity and block timestamp.
+- `V3QuoterV2`: V3 QuoterV2 exact-input quote with output, post-swap sqrtPriceX96, initialized ticks crossed and gas estimate.
+- `quote_capital_grid`: six USD-equivalent capital sizes in both directions, requiring independent USD prices for both tokens.
+- `calculate_quote_capacity`: quote-driven search over a supplied liquidity-backed capital bound; it is not the maximum profitable sample size.
+- `evaluate_dex_cex` and `evaluate_dex_dex`: both directions, explicit token compatibility, fees and gas inputs.
+- `rank_opportunities`: only VERIFIED, fully costed opportunities with measured capacity are eligible; weights are 45% net profit, 35% ROI, 20% capital capacity.
 
-The original PlunderSwap V3 WZIL/zUSDT pool is disabled in the multi-market registry. Earlier exact-input and exact-output observations were inconsistent, and neither a verified QuoterV2 deployment nor the WZIL-to-KuCoin-ZIL asset mapping has been established. The market must remain unranked until those checks pass.
+## PlunderSwap reference
+
+The WZIL/zUSDT market on Zilliqa remains `UNVERIFIED`, disabled and reference-only. Known Router, Pool, token addresses and fee are retained as reference metadata. Factory and QuoterV2 are deliberately unset. WZIL and KuCoin ZIL are not assumed equivalent. No ranking is allowed until all independent checks pass.
 
 ## Tests
 
@@ -59,3 +68,5 @@ The original PlunderSwap V3 WZIL/zUSDT pool is disabled in the multi-market regi
 python -m compileall -q .
 python -m pytest -q
 ```
+
+Mock tests do not prove a live deployment. Integration tests must be run only against verified deployments. No secrets belong in the repository.
