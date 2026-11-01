@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "capital_sizes_usdt": ["100", "250", "500", "1000", "2500", "5000"],
+  "comparison_routes": ["DEX_CEX", "DEX_DEX"],
+  "ranking_weights": {
+    "net_profit": 0.45,
+    "roi": 0.35,
+    "capital_capacity": 0.20
+  },
+  "discovery": {
+    "provider": "dexscreener",
+    "minimum_liquidity_usd": 10000,
+    "minimum_volume_24h_usd": 10000,
+    "stable_quote_symbols": ["USDT", "USDC", "DAI", "USDC.E"]
+  },
+  "chains": [
+    {"id": 32769, "name": "zilliqa", "rpc_env": "ZILLIQA_RPC_URL", "native_symbol": "ZIL"},
+    {"id": 1, "name": "ethereum", "rpc_env": "ETHEREUM_RPC_URL", "native_symbol": "ETH"},
+    {"id": 56, "name": "bsc", "rpc_env": "BSC_RPC_URL", "native_symbol": "BNB"},
+    {"id": 137, "name": "polygon", "rpc_env": "POLYGON_RPC_URL", "native_symbol": "POL"},
+    {"id": 42161, "name": "arbitrum", "rpc_env": "ARBITRUM_RPC_URL", "native_symbol": "ETH"},
+    {"id": 8453, "name": "base", "rpc_env": "BASE_RPC_URL", "native_symbol": "ETH"},
+    {"id": 10, "name": "optimism", "rpc_env": "OPTIMISM_RPC_URL", "native_symbol": "ETH"},
+    {"id": 43114, "name": "avalanche", "rpc_env": "AVALANCHE_RPC_URL", "native_symbol": "AVAX"}
+  ],
+  "markets": [
+    {
+      "id": "plunderswap_v3_wzil_zusdt_reference",
+      "chain_id": 32769,
+      "chain": "zilliqa",
+      "dex": "plunderswap",
+      "version": "V3",
+      "pool": "0xD9969Fac78afC7C696443802C0b8cFf1b1B45Fc8",
+      "token0": {"symbol": "zUSDT", "address": "0x2274005778063684fbB1BfA96a2b725dc37d75f9", "decimals": 6},
+      "token1": {"symbol": "WZIL", "address": "0x94e18aE7dd5eE57B55f30c4B63E2760c09EFb192", "decimals": 18},
+      "fee_type": "v3_fee_units",
+      "fee": 100,
+      "quote_adapter": "v3_quoter_v2",
+      "quoter": null,
+      "cex": {"exchange": "kucoin", "symbol": "ZIL-USDT", "base_asset": "ZIL", "quote_asset": "USDT"},
+      "wrapped_asset_mapping": "WZIL=ZIL requires independent validation",
+      "estimated_round_trip_gas_usdt": null,
+      "enabled": false,
+      "status": "reference_only",
+      "disabled_reason": "Existing router quotes are inconsistent; do not rank until a verified Quoter address and WZIL/ZIL parity are configured."
+    }
+  ]
+}
