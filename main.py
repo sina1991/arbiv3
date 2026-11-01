@@ -93,7 +93,8 @@ async def run() -> None:
     enabled=[m for m in registry["markets"] if m.get("enabled") is True and m.get("status")=="verified"]
     report={"architecture":"V3_ONLY_CONCENTRATED_LIQUIDITY","capital_sizes_usdt":[str(x) for x in CAPITAL_SIZES_USDT],
             "ranking_weights":registry["ranking_weights"],
-            "networks":[{"chain_id":c["id"],"name":c["name"],"status":c.get("status","UNVERIFIED")} for c in registry["chains"]],
+            "networks":[{"chain_id":c["id"],"name":c["name"],"status":c.get("status","UNVERIFIED"),"rpc_status":c.get("rpc_status","UNVERIFIED"),
+                         "rpc_chain_id":c.get("rpc_chain_id")} for c in registry["chains"]],
             "markets":[{"id":m["id"],"chain":m["chain"],"dex":m["dex"],"version":m["version"],
                         "status":m.get("status","UNVERIFIED"),"enabled":m.get("enabled",False),
                         "reason":m.get("disabled_reason")} for m in registry["markets"]],
