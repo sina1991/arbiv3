@@ -75,6 +75,18 @@ class KuCoinClient:
                 raise RuntimeError(f"KuCoin private API error ({response.status}): {payload}")
             return payload.get("data")
 
+    async def account_balances(self) -> dict[str, Decimal]:
+        """Return available trade-account balances keyed by currency."""
+        data = await self._private_request("GET", "/api/v1/accounts")
+        balances: dict[str, Decimal] = {}
+        for account in data or []:
+            if account.get("type") != "trade":
+                continue
+            currency = str(account.get("currency", "")).upper()
+            available = Decimal(str(account.get("available", "0")))
+            balances[currency] = balances.get(currency, Decimal("0")) + available
+        return balances
+
     async def market_order_and_verify(self, side: str, zil_size: Decimal) -> dict:
         if side not in {"buy", "sell"}:
             raise ValueError("KuCoin side must be buy or sell")
