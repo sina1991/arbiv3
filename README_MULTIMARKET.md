@@ -42,7 +42,7 @@ Gas USD cost is derived from explicit gas units, current gas price and native-to
 
 `python main.py --scan` validates each enabled market, obtains the six-size bidirectional V3 quote grid, fetches KuCoin public Level-2 depth for configured CEX routes, estimates gas from Quoter gas units/current gas price/native-token USD price, evaluates both route directions, measures capacity within configured liquidity bounds and writes JSON/CSV reports.
 
-For a market to be eligible, configure and independently verify `token0_usd_price`, `token1_usd_price`, `usd_prices_verified`, `native_token_usd_price`, `native_token_usd_price_verified`, `slippage_bps`, `capacity_search_max_usdt`, and exact `cex.base_token_address` / `cex.quote_token_address` plus `cex.asset_mapping_verified` and fee rate for DEX-CEX. DEX-DEX markets additionally require exact `token_base` and `token_quote` objects. Missing fields keep the route unranked.
+For a market to be eligible, configure and independently verify `token0_usd_price`, `token1_usd_price`, `usd_prices_verified`, `native_token_usd_price`, `native_token_usd_price_verified`, `slippage_bps`, `capacity_search_max_usdt`, and exact `cex.base_token_address` / `cex.quote_token_address` plus `cex.asset_mapping_verified`, `cex.fee_rate` and `cex.fee_rate_verified` for DEX-CEX. DEX-DEX markets additionally require exact `token_base` and `token_quote` objects. Missing fields keep the route unranked.
 
 ## Ranking and reporting
 
