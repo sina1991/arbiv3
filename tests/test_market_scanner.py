@@ -1,5 +1,4 @@
 from decimal import Decimal as D
-from pathlib import Path
 
 import pytest
 from web3 import Web3
@@ -7,7 +6,7 @@ from web3 import Web3
 from market_scanner import (
     CAPITAL_SIZES_USDT, V3PoolValidator, calculate_quote_capacity,
     evaluate_dex_cex, evaluate_dex_dex, from_raw, load_registry,
-    rank_opportunities, to_raw,
+    rank_opportunities, to_raw, estimate_gas_cost_usdt,
 )
 
 
@@ -30,8 +29,8 @@ def test_amount_decimal_handling_is_exact():
 def test_capacity_is_quote_derived_not_maximum_sample_size():
     capacity=calculate_quote_capacity(
         lambda amount: amount*D("0.02")-amount*amount*D("0.00001"),
-        minimum_input=D("1"),maximum_input=D("1000"),gas_cost=D("1"),tolerance=D("0.001"))
-    assert D("100") < capacity < D("1000")
+        minimum_input=D("1"),maximum_input=D("3000"),gas_cost=D("1"),tolerance=D("0.001"))
+    assert D("100") < capacity < D("3000")
     assert calculate_quote_capacity(lambda amount:D("0"),minimum_input=D("1"),
                                     maximum_input=D("100"),gas_cost=D("0"))==0
 
@@ -162,3 +161,11 @@ def test_v3_validator_rejects_wrong_factory_mapping():
       V3PoolValidator(FakeWeb3(FakeEth(contracts))).validate(
         expected_chain_id=1,factory_address=factory,pool_address=pool,
         token_a=token0,token_b=token1,fee=500)
+
+
+
+def test_gas_cost_conversion_requires_real_positive_inputs():
+    cost=estimate_gas_cost_usdt(200_000,30_000_000_000,D("3000"))
+    assert cost==D("0.018")
+    with pytest.raises(ValueError):
+        estimate_gas_cost_usdt(0,30_000_000_000,D("3000"))
