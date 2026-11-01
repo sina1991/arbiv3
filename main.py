@@ -5,11 +5,13 @@ import asyncio
 import json
 import logging
 from decimal import Decimal
-from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from market_scanner import (
-    CAPITAL_SIZES_USDT, discover_dexscreener_pairs, load_registry, rpc_for_chain,
-    serialise, verify_market, verify_network_connectivity, write_reports,
+    CAPITAL_SIZES_USDT, discover_dexscreener_pairs, load_registry,
+    quote_capital_grid, serialise, verify_market, verify_network_connectivity, write_reports,
 )
 
 logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
@@ -23,6 +25,8 @@ async def run() -> None:
     parser.add_argument("--min-liquidity",default=None)
     parser.add_argument("--min-volume",default=None)
     parser.add_argument("--validate",metavar="MARKET_ID",help="Validate configured V3 factory, pool and QuoterV2 on-chain")
+    parser.add_argument("--token0-usd-price",default=None,help="Independently sourced USD price for market token0")
+    parser.add_argument("--token1-usd-price",default=None,help="Independently sourced USD price for market token1")
     parser.add_argument("--check-networks",action="store_true",help="Check configured RPC connectivity and chain IDs")
     parser.add_argument("--output-dir",default="reports")
     args=parser.parse_args()
@@ -61,6 +65,14 @@ async def run() -> None:
             report={"market_id":market["id"],"status":"VERIFIED","pool":snapshot,
                     "quoter":quoter.address,"probe_quotes":[q0,q1],
                     "note":"Deployment and bidirectional probe quotes verified; market still requires token USD mapping, gas and fee validation before ranking."}
+            if args.token0_usd_price is not None and args.token1_usd_price is not None:
+                grid=quote_capital_grid(snapshot,quoter,capital_sizes_usdt=CAPITAL_SIZES_USDT,
+                    token0_usd_price=Decimal(args.token0_usd_price),
+                    token1_usd_price=Decimal(args.token1_usd_price))
+                report["capital_quote_grid"]=grid
+                report["capital_quote_grid_status"]="QUOTED_NOT_RANKABLE_UNLESS_PRICE_SOURCES_AND_COSTS_ARE_VERIFIED"
+            elif args.token0_usd_price is not None or args.token1_usd_price is not None:
+                report["capital_quote_grid_status"]="INSUFFICIENT_DATA_BOTH_TOKEN_USD_PRICES_REQUIRED"
         except Exception as exc:
             report={"market_id":market["id"],"status":"UNVERIFIED","reason":f"{type(exc).__name__}: {exc}"}
         rows=[serialise(report)]
