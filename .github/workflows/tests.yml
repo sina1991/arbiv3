@@ -18,3 +18,4 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m compileall -q .
       - run: python -m pytest -q
+      - run: python main.py --scan --output-dir /tmp/arbiV3-reports
