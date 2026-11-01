@@ -24,7 +24,9 @@ Live mode can submit real orders and spend real assets. Start with DRY_RUN and v
 
 This is pre-funded cross-exchange arbitrage: WZIL and zUSDT must already be available in the PlunderSwap wallet, while ZIL and USDT must already be available in KuCoin. The bot does not transfer assets between venues.
 
-The two venue trades are not atomic. A successful trade on one venue followed by a failure on the other can leave inventory unbalanced. Live execution therefore verifies KuCoin order fills and on-chain receipts, but cannot guarantee a hedge if the second venue fails. Use conservative sizes and monitor inventory.
+The two venue trades are not atomic. A successful trade on one venue followed by a failure on the other can leave inventory unbalanced. Live execution verifies KuCoin order fills and on-chain receipts; if the second leg fails or is partial, the process halts for manual reconciliation instead of automatically retrying. It cannot guarantee a hedge. Use conservative sizes and monitor inventory.
+
+The zUSDT proceeds/cost are compared 1:1 with USDT for the estimate. A zUSDT depeg, redemption limitation, or liquidity discount is not currently modeled.
 
 ## V3 quoting
 
@@ -41,7 +43,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Fill in the RPC endpoint, KuCoin credentials, and wallet address. The wallet private key is only required for LIVE mode. Never commit `.env`.
+Fill in the RPC endpoint, KuCoin credentials, and wallet address. The wallet private key is only required for LIVE mode. Never commit `.env`. The wallet must already hold the relevant assets and have sufficient token allowances granted to the configured router; the bot does not issue approvals automatically. Router-based quotes can fail when the wallet has insufficient balance or allowance.
 
 ## Run
 
@@ -62,7 +64,7 @@ Set `TRADING_MODE=DRY_RUN` for safe observation. The bot refuses LIVE mode unles
 ## Tests
 
 ```bash
-pytest -q
+python -m pytest -q
 ```
 
 Tests cover pure arbitrage arithmetic and safety-mode behavior. They do not replace fork testing or small-value live validation.
