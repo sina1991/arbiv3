@@ -225,3 +225,96 @@ def rpc_for_chain(chain: dict[str, Any]) -> str:
     if not value:
         raise RuntimeError(f"RPC environment variable {chain['rpc_env']} is not configured")
     return value
+
+
+def _opportunity_row(route: str, market_a: str, market_b: str | None,
+                     capital_usdt: Decimal, gross_profit_usdt: Decimal,
+                     gas_cost_usdt: Decimal | None) -> dict[str, Any]:
+    net = gross_profit_usdt - gas_cost_usdt if gas_cost_usdt is not None else None
+    roi = (net / capital_usdt * 100) if net is not None and capital_usdt > 0 else None
+    return {
+        "route": route, "market_a": market_a, "market_b": market_b,
+        "capital_usdt": capital_usdt, "gross_profit_usdt": gross_profit_usdt,
+        "gas_cost_usdt": gas_cost_usdt, "net_profit_usdt": net,
+        "roi_percent": roi, "capacity_usdt": None,
+    }
+
+
+def evaluate_dex_cex(
+    market_id: str, capital_sizes_usdt: list[Decimal],
+    quote_to_base: Any, base_to_quote: Any,
+    cex_bid: Decimal, cex_ask: Decimal, cex_fee_rate: Decimal,
+    quote_asset_usd_price: Decimal, gas_cost_usdt: Decimal | None,
+) -> list[dict[str, Any]]:
+    """Evaluate both pre-funded DEX-CEX directions for every quote-currency capital size."""
+    if min(cex_bid, cex_ask, quote_asset_usd_price) <= 0 or cex_bid > cex_ask:
+        raise ValueError("Invalid CEX prices or quote-asset USD conversion")
+    if not 0 <= cex_fee_rate < 1:
+        raise ValueError("CEX fee rate must be in [0, 1)")
+    rows: list[dict[str, Any]] = []
+    for capital_usdt in capital_sizes_usdt:
+        capital_quote = capital_usdt / quote_asset_usd_price
+        base_from_dex = quote_to_base(capital_quote)
+        cex_sell_proceeds_usd = base_from_dex * cex_bid * (1 - cex_fee_rate) * quote_asset_usd_price
+        rows.append(_opportunity_row(
+            "DEX_CEX", market_id, None, capital_usdt,
+            cex_sell_proceeds_usd - capital_usdt, gas_cost_usdt,
+        ))
+
+        base_bought_cex = capital_quote / (cex_ask * (1 + cex_fee_rate))
+        quote_from_dex = base_to_quote(base_bought_cex)
+        dex_sell_proceeds_usd = quote_from_dex * quote_asset_usd_price
+        rows.append(_opportunity_row(
+            "CEX_DEX", market_id, None, capital_usdt,
+            dex_sell_proceeds_usd - capital_usdt, gas_cost_usdt,
+        ))
+
+    for row in rows:
+        same_route = [candidate for candidate in rows
+                      if candidate["route"] == row["route"]
+                      and candidate["net_profit_usdt"] is not None
+                      and candidate["net_profit_usdt"] > 0]
+        if same_route:
+            row["capacity_usdt"] = max(candidate["capital_usdt"] for candidate in same_route)
+    return rows
+
+
+def evaluate_dex_dex(
+    market_a: str, market_b: str, capital_sizes_usdt: list[Decimal],
+    a_quote_to_base: Any, a_base_to_quote: Any,
+    b_quote_to_base: Any, b_base_to_quote: Any,
+    quote_asset_usd_price: Decimal,
+    gas_cost_a_usdt: Decimal | None, gas_cost_b_usdt: Decimal | None,
+) -> list[dict[str, Any]]:
+    """Compare two pools for the same chain and exact same base/quote token contracts."""
+    if quote_asset_usd_price <= 0:
+        raise ValueError("quote_asset_usd_price must be positive")
+    total_gas = (gas_cost_a_usdt + gas_cost_b_usdt
+                 if gas_cost_a_usdt is not None and gas_cost_b_usdt is not None else None)
+    rows: list[dict[str, Any]] = []
+    for capital_usdt in capital_sizes_usdt:
+        capital_quote = capital_usdt / quote_asset_usd_price
+
+        base_from_a = a_quote_to_base(capital_quote)
+        quote_from_b = b_base_to_quote(base_from_a)
+        rows.append(_opportunity_row(
+            "DEX_DEX", market_a, market_b, capital_usdt,
+            (quote_from_b - capital_quote) * quote_asset_usd_price, total_gas,
+        ))
+
+        base_from_b = b_quote_to_base(capital_quote)
+        quote_from_a = a_base_to_quote(base_from_b)
+        rows.append(_opportunity_row(
+            "DEX_DEX", market_b, market_a, capital_usdt,
+            (quote_from_a - capital_quote) * quote_asset_usd_price, total_gas,
+        ))
+
+    for row in rows:
+        same_direction = [candidate for candidate in rows
+                          if candidate["market_a"] == row["market_a"]
+                          and candidate["market_b"] == row["market_b"]
+                          and candidate["net_profit_usdt"] is not None
+                          and candidate["net_profit_usdt"] > 0]
+        if same_direction:
+            row["capacity_usdt"] = max(candidate["capital_usdt"] for candidate in same_direction)
+    return rows
