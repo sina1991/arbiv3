@@ -161,6 +161,8 @@ class V3PoolValidator:
         liquidity = int(pool.functions.liquidity().call())
         if sqrt_price <= 0 or liquidity <= 0 or not unlocked:
             raise ValueError("Pool has no active price/liquidity or is locked")
+        if tick < -887272 or tick > 887272:
+            raise ValueError("Pool current tick is outside V3 bounds")
         block = self.w3.eth.get_block("latest")
         return V3PoolSnapshot(
             int(expected_chain_id), factory_address, pool_address, token0, token1,
@@ -637,12 +639,21 @@ def verify_market(market: dict[str, Any], chain: dict[str, Any]) -> tuple[V3Pool
         expected_chain_id=int(chain["id"]),factory_address=market["factory"],
         pool_address=market["pool"],token_a=market["token0"]["address"],
         token_b=market["token1"]["address"],fee=int(market["fee"]))
+    if (market["token0"]["address"].lower() != snapshot.token0.lower()
+            or market["token1"]["address"].lower() != snapshot.token1.lower()):
+        raise ValueError("Configured token0/token1 ordering differs from on-chain pool ordering")
     configured_decimals = {market["token0"]["address"].lower():int(market["token0"]["decimals"]),
                            market["token1"]["address"].lower():int(market["token1"]["decimals"])}
     actual_decimals = {snapshot.token0.lower():snapshot.token0_decimals,
                        snapshot.token1.lower():snapshot.token1_decimals}
     if configured_decimals != actual_decimals:
         raise ValueError("Configured token decimals do not match on-chain ERC-20 decimals")
+    for token in (market["token0"],market["token1"]):
+        if token.get("symbol"):
+            token_contract = w3.eth.contract(address=_address(token["address"]),abi=ERC20_ABI)
+            actual_symbol = str(token_contract.functions.symbol().call())
+            if actual_symbol != str(token["symbol"]):
+                raise ValueError(f"Token symbol mismatch for {token['address']}: expected {token['symbol']}, got {actual_symbol}")
     quoter = V3QuoterV2(w3,market["quoter"])
     probe_token = market.get("probe_token") or market["token0"]["address"]
     probe_amount = _decimal(market.get("probe_amount","0.000001"))
