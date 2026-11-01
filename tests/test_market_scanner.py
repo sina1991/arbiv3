@@ -203,7 +203,7 @@ def test_dex_cex_requires_verified_orderbook_depth_and_usd_prices():
 def test_cex_orderbook_depth_simulation_consumes_multiple_levels():
     bids=[(D("10"),D("2")),(D("9"),D("3"))]
     asks=[(D("10"),D("2")),(D("11"),D("3"))]
-    assert simulate_sell_base_into_bids(D("3"),bids)==D("28")
-    assert simulate_buy_base_with_quote(D("25"),asks)==D("2.5")
+    assert simulate_sell_base_into_bids(D("3"),bids)==D("29")
+    assert simulate_buy_base_with_quote(D("25"),asks)==D("2")+D("5")/D("11")
     with pytest.raises(ValueError,match="Insufficient"):
         simulate_sell_base_into_bids(D("6"),bids)
