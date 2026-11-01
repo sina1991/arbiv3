@@ -1,79 +1,164 @@
 from decimal import Decimal as D
+from pathlib import Path
 
 import pytest
+from web3 import Web3
 
-from market_scanner import load_registry, rank_opportunities, V2PoolQuoter
-
-
-def test_registry_contains_requested_capital_sizes_and_both_routes():
-    registry = load_registry()
-    assert registry["capital_sizes_usdt"] == ["100", "250", "500", "1000", "2500", "5000"]
-    assert registry["comparison_routes"] == ["DEX_CEX", "DEX_DEX"]
-
-
-def test_ranking_is_per_capital_and_uses_net_profit_roi_and_capacity():
-    weights = {"net_profit": "0.45", "roi": "0.35", "capital_capacity": "0.20"}
-    rows = [
-        {"route": "DEX_CEX", "market_a": "A", "capital_usdt": "100",
-         "gross_profit_usdt": "2", "gas_cost_usdt": "0.2", "net_profit_usdt": "1.8",
-         "roi_percent": "1.8", "capacity_usdt": "500"},
-        {"route": "DEX_DEX", "market_a": "B", "market_b": "C", "capital_usdt": "100",
-         "gross_profit_usdt": "3", "gas_cost_usdt": "0.1", "net_profit_usdt": "2.9",
-         "roi_percent": "2.9", "capacity_usdt": "1000"},
-        {"route": "DEX_CEX", "market_a": "D", "capital_usdt": "250",
-         "gross_profit_usdt": "5", "gas_cost_usdt": None, "net_profit_usdt": None,
-         "roi_percent": None, "capacity_usdt": None},
-    ]
-    ranked = rank_opportunities(rows, weights)
-    assert len(ranked) == 2
-    assert ranked[0].capital_usdt == D("100")
-    assert ranked[0].market_a == "B"
-    assert ranked[0].rank == 1
-    assert ranked[0].score <= D("100")
+from market_scanner import (
+    CAPITAL_SIZES_USDT, V3PoolValidator, calculate_quote_capacity,
+    evaluate_dex_cex, evaluate_dex_dex, from_raw, load_registry,
+    rank_opportunities, to_raw,
+)
 
 
-def test_unpriced_gas_and_nonpositive_net_profit_are_not_ranked():
-    rows = [
-        {"route": "DEX_CEX", "market_a": "A", "capital_usdt": "100",
-         "gross_profit_usdt": "4", "gas_cost_usdt": None, "net_profit_usdt": None,
-         "roi_percent": None, "capacity_usdt": None},
-        {"route": "DEX_DEX", "market_a": "B", "market_b": "C", "capital_usdt": "100",
-         "gross_profit_usdt": "1", "gas_cost_usdt": "0.2", "net_profit_usdt": "-0.1",
-         "roi_percent": "-0.1", "capacity_usdt": "100"},
-    ]
-    assert rank_opportunities(rows, {"net_profit": ".45", "roi": ".35", "capital_capacity": ".20"}) == []
+def test_registry_is_v3_only_and_keeps_reference_disabled():
+    registry=load_registry()
+    assert registry["project_architecture"]=="V3_ONLY_CONCENTRATED_LIQUIDITY"
+    assert [D(x) for x in registry["capital_sizes_usdt"]]==list(CAPITAL_SIZES_USDT)
+    assert all(m["version"]=="V3" and m["quote_adapter"]=="v3_quoter_v2" for m in registry["markets"])
+    assert all(not m["enabled"] for m in registry["markets"])
+    assert all(c["status"]=="UNVERIFIED" for c in registry["chains"])
 
 
-def test_v2_fee_units_reject_invalid_basis_points():
-    with pytest.raises(ValueError, match="fee_bps"):
-        V2PoolQuoter(None, "0x0000000000000000000000000000000000000001", 10001)
+def test_amount_decimal_handling_is_exact():
+    assert to_raw(D("1.25"),6)==1_250_000
+    assert from_raw(1_250_000,6)==D("1.25")
+    with pytest.raises(ValueError):
+        to_raw(D("0.0000001"),6)
 
 
-def test_dex_cex_evaluator_models_both_directions_and_unknown_gas():
-    from market_scanner import evaluate_dex_cex
-    rows = evaluate_dex_cex(
-        "pool-a", [D("100")],
-        quote_to_base=lambda quote: quote / D("10"),
-        base_to_quote=lambda base: base * D("10.2"),
-        cex_bid=D("10.2"), cex_ask=D("10.3"), cex_fee_rate=D("0.001"),
-        quote_asset_usd_price=D("1"), gas_cost_usdt=None,
-    )
-    assert {row["route"] for row in rows} == {"DEX_CEX", "CEX_DEX"}
+def test_capacity_is_quote_derived_not_maximum_sample_size():
+    capacity=calculate_quote_capacity(
+        lambda amount: amount*D("0.02")-amount*amount*D("0.00001"),
+        minimum_input=D("1"),maximum_input=D("1000"),gas_cost=D("1"),tolerance=D("0.001"))
+    assert D("100") < capacity < D("1000")
+    assert calculate_quote_capacity(lambda amount:D("0"),minimum_input=D("1"),
+                                    maximum_input=D("100"),gas_cost=D("0"))==0
+
+
+def test_unknown_gas_never_produces_net_or_rankable_opportunity():
+    rows=evaluate_dex_cex(
+        market_id="pool",capital_sizes_usdt=[D("100")],
+        quote_to_base=lambda amount:amount/D("10"),
+        base_to_quote=lambda amount:amount*D("10.2"),
+        cex_bid=D("10.2"),cex_ask=D("10.3"),cex_fee_rate=D(".001"),
+        quote_asset_usd_price=D("1"),gas_cost_usdt=None,
+        status="VERIFIED",asset_mapping_verified=True)
+    assert len(rows)==2
     assert all(row["net_profit_usdt"] is None for row in rows)
-    assert all(row["capacity_usdt"] is None for row in rows)
+    assert all(row["status"]=="INSUFFICIENT_DATA" for row in rows)
+    assert rank_opportunities(rows,{"net_profit":".45","roi":".35","capital_capacity":".20"})==[]
 
 
-def test_dex_dex_evaluator_subtracts_both_network_legs_gas():
-    from market_scanner import evaluate_dex_dex
-    rows = evaluate_dex_dex(
-        "pool-a", "pool-b", [D("100")],
-        a_quote_to_base=lambda quote: quote / D("10"),
-        a_base_to_quote=lambda base: base * D("10"),
-        b_quote_to_base=lambda quote: quote / D("10.2"),
-        b_base_to_quote=lambda base: base * D("10.3"),
-        quote_asset_usd_price=D("1"),
-        gas_cost_a_usdt=D("0.1"), gas_cost_b_usdt=D("0.1"),
-    )
-    profitable = [row for row in rows if row["net_profit_usdt"] is not None and row["net_profit_usdt"] > 0]
-    assert profitable
-    assert all(row["gas_cost_usdt"] == D("0.2") for row in rows)
+def test_unverified_asset_mapping_is_never_compared():
+    rows=evaluate_dex_cex(
+        market_id="pool",capital_sizes_usdt=[D("100")],
+        quote_to_base=lambda amount:amount,base_to_quote=lambda amount:amount,
+        cex_bid=D("1"),cex_ask=D("1"),cex_fee_rate=D("0"),
+        quote_asset_usd_price=D("1"),gas_cost_usdt=D("0"),
+        status="UNVERIFIED",asset_mapping_verified=False)
+    assert rows[0]["status"]=="UNVERIFIED"
+
+
+def test_dex_dex_rejects_cross_chain_or_nonidentical_token_contracts():
+    a={"id":"a","chain_id":1,"token_base":{"address":"0x"+"11"*20,"decimals":18},
+       "token_quote":{"address":"0x"+"22"*20,"decimals":6}}
+    b={"id":"b","chain_id":56,"token_base":{"address":"0x"+"11"*20,"decimals":18},
+       "token_quote":{"address":"0x"+"22"*20,"decimals":6}}
+    rows=evaluate_dex_dex(market_a=a,market_b=b,capital_sizes_usdt=[D("100")],
+        a_quote_to_base=lambda x:x,a_base_to_quote=lambda x:x,
+        b_quote_to_base=lambda x:x,b_base_to_quote=lambda x:x,
+        quote_asset_usd_price=D("1"),gas_cost_a_usdt=D("1"),gas_cost_b_usdt=D("1"))
+    assert rows[0]["status"]=="REJECTED"
+
+
+def test_dex_dex_unknown_one_leg_gas_is_insufficient_data():
+    a={"id":"a","chain_id":1,"token_base":{"address":"0x"+"11"*20,"decimals":18},
+       "token_quote":{"address":"0x"+"22"*20,"decimals":6}}
+    b={"id":"b","chain_id":1,"token_base":{"address":"0x"+"11"*20,"decimals":18},
+       "token_quote":{"address":"0x"+"22"*20,"decimals":6}}
+    rows=evaluate_dex_dex(market_a=a,market_b=b,capital_sizes_usdt=[D("100")],
+        a_quote_to_base=lambda x:x/D("10"),a_base_to_quote=lambda x:x*D("10"),
+        b_quote_to_base=lambda x:x/D("9"),b_base_to_quote=lambda x:x*D("11"),
+        quote_asset_usd_price=D("1"),gas_cost_a_usdt=D(".1"),gas_cost_b_usdt=None)
+    assert len(rows)==2
+    assert all(row["net_profit_usdt"] is None for row in rows)
+    assert all(row["status"]=="INSUFFICIENT_DATA" for row in rows)
+
+
+def test_ranking_requires_verified_complete_rows_and_uses_weights():
+    weights={"net_profit":".45","roi":".35","capital_capacity":".20"}
+    base={"route":"DEX_CEX","market_a":"a","market_b":None,"capital_usdt":"100",
+          "gross_profit_usdt":"3","gas_cost_usdt":".1","net_profit_usdt":"2.9",
+          "roi_percent":"2.9","capacity_usdt":"500","status":"VERIFIED"}
+    rows=[base,{**base,"market_a":"b","status":"UNVERIFIED"},
+          {**base,"market_a":"c","capacity_usdt":None}]
+    ranked=rank_opportunities(rows,weights)
+    assert len(ranked)==1 and ranked[0].market_a=="a" and ranked[0].rank==1
+
+
+class FakeCall:
+    def __init__(self,value): self.value=value
+    def call(self): return self.value
+
+
+class FakeFunctions:
+    def __init__(self,values): self.values=values
+    def __getattr__(self,name): return lambda *args:FakeCall(self.values[name])
+
+
+class FakeContract:
+    def __init__(self,values): self.functions=FakeFunctions(values)
+
+
+class FakeEth:
+    chain_id=1
+    def __init__(self,contracts): self.contracts=contracts
+    def get_code(self,address): return b"\x01"
+    def contract(self,address,abi): return self.contracts[address.lower()]
+    def get_block(self,block): return {"number":123,"timestamp":1_700_000_000}
+
+
+class FakeWeb3:
+    def __init__(self,eth): self.eth=eth
+
+
+def test_v3_factory_pool_token_fee_tick_liquidity_validation_with_mock_rpc():
+    factory=Web3.to_checksum_address("0x"+"aa"*20)
+    pool=Web3.to_checksum_address("0x"+"bb"*20)
+    token0=Web3.to_checksum_address("0x"+"11"*20)
+    token1=Web3.to_checksum_address("0x"+"22"*20)
+    contracts={
+      factory.lower():FakeContract({"getPool":pool}),
+      pool.lower():FakeContract({"factory":factory,"token0":token0,"token1":token1,
+        "fee":500,"tickSpacing":10,"slot0":(2**96,0,0,0,0,0,True),"liquidity":1000}),
+      token0.lower():FakeContract({"decimals":18,"symbol":"A"}),
+      token1.lower():FakeContract({"decimals":6,"symbol":"B"}),
+    }
+    snapshot=V3PoolValidator(FakeWeb3(FakeEth(contracts))).validate(
+      expected_chain_id=1,factory_address=factory,pool_address=pool,
+      token_a=token0,token_b=token1,fee=500)
+    assert snapshot.status=="VERIFIED"
+    assert snapshot.token0==token0 and snapshot.token1==token1
+    assert snapshot.token0_decimals==18 and snapshot.token1_decimals==6
+    assert snapshot.fee==500 and snapshot.tick_spacing==10
+    assert snapshot.liquidity==1000 and snapshot.block_number==123
+
+
+def test_v3_validator_rejects_wrong_factory_mapping():
+    factory=Web3.to_checksum_address("0x"+"aa"*20)
+    pool=Web3.to_checksum_address("0x"+"bb"*20)
+    token0=Web3.to_checksum_address("0x"+"11"*20)
+    token1=Web3.to_checksum_address("0x"+"22"*20)
+    other=Web3.to_checksum_address("0x"+"cc"*20)
+    contracts={
+      factory.lower():FakeContract({"getPool":other}),
+      pool.lower():FakeContract({"factory":factory,"token0":token0,"token1":token1,
+        "fee":500,"tickSpacing":10,"slot0":(2**96,0,0,0,0,0,True),"liquidity":1000}),
+      token0.lower():FakeContract({"decimals":18,"symbol":"A"}),
+      token1.lower():FakeContract({"decimals":6,"symbol":"B"}),
+    }
+    with pytest.raises(ValueError,match="Factory getPool"):
+      V3PoolValidator(FakeWeb3(FakeEth(contracts))).validate(
+        expected_chain_id=1,factory_address=factory,pool_address=pool,
+        token_a=token0,token_b=token1,fee=500)
