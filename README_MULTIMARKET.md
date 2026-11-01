@@ -5,6 +5,7 @@ arbiV3 is intentionally a **V3 concentrated-liquidity system**. Do not add V2 ad
 ## Required market metadata
 
 Each enabled market must specify:
+- the exact `slot0_fee_protocol_type` ABI variant for its V3-compatible pool (`uint8` canonical default; use `uint32` only when deployment evidence confirms it)
 - chain ID and RPC environment variable
 - V3 DEX identifier and protocol version
 - V3 Factory, Pool and QuoterV2 addresses
