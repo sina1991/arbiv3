@@ -398,16 +398,20 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
                     return cex_sell_base(base_amount) * (1-cex_fee_rate) * quote_asset_usd_price - size
                 bought = cex_buy_base_with_quote(qin / (1+cex_fee_rate))
                 return base_to_quote(bought) * (Decimal(1)-Decimal(slippage_bps)/Decimal(10_000)) * quote_asset_usd_price - size
-            capacity = (calculate_quote_capacity(gross_at, minimum_input=min(capital_sizes),
-                         maximum_input=capacity_search_max_usdt, gas_cost=gas_cost_usdt)
-                         if gas_cost_usdt is not None and capacity_search_max_usdt is not None else None)
+            capacity_error = None
+            try:
+                capacity = (calculate_quote_capacity(gross_at, minimum_input=min(capital_sizes),
+                             maximum_input=capacity_search_max_usdt, gas_cost=gas_cost_usdt)
+                             if gas_cost_usdt is not None and capacity_search_max_usdt is not None else None)
+            except Exception as exc:
+                capacity, capacity_error = None, f"{type(exc).__name__}: {exc}"
             rows.append({"route":route,"market_a":market_id,"market_b":None,
                          "capital_usdt":capital,"gross_profit_usdt":gross,
                          "gas_cost_usdt":gas_cost_usdt,"net_profit_usdt":net,
                          "roi_percent":net/capital*100 if net is not None else None,
                          "capacity_usdt":capacity,"status":"VERIFIED" if net is not None and capacity is not None else "INSUFFICIENT_DATA",
                          "reason":None if net is not None and capacity is not None else
-                                  ("Capacity bounds/quotes unavailable" if net is not None else "Gas cost unavailable")})
+                                  (capacity_error or "Capacity bounds/quotes unavailable" if net is not None else "Gas cost unavailable")})
     return rows
 
 
@@ -453,15 +457,19 @@ def evaluate_dex_dex(*, market_a: dict[str, Any], market_b: dict[str, Any],
                 q = size / quote_asset_usd_price
                 after_first_quote = first_quote(q) * (Decimal(1)-Decimal(slippage_bps)/Decimal(10_000))
                 return (second_quote(after_first_quote) * (Decimal(1)-Decimal(slippage_bps)/Decimal(10_000))-q)*quote_asset_usd_price
-            capacity = (calculate_quote_capacity(gross_at,minimum_input=min(capital_sizes),
-                         maximum_input=capacity_search_max_usdt,gas_cost=gas)
-                         if gas is not None and capacity_search_max_usdt is not None else None)
+            capacity_error = None
+            try:
+                capacity = (calculate_quote_capacity(gross_at,minimum_input=min(capital_sizes),
+                             maximum_input=capacity_search_max_usdt,gas_cost=gas)
+                             if gas is not None and capacity_search_max_usdt is not None else None)
+            except Exception as exc:
+                capacity, capacity_error = None, f"{type(exc).__name__}: {exc}"
             rows.append({"route":"DEX_DEX","market_a":source["id"],"market_b":destination["id"],
                          "capital_usdt":capital,"gross_profit_usdt":gross,"gas_cost_usdt":gas,
                          "net_profit_usdt":net,"roi_percent":net/capital*100 if net is not None else None,
                          "capacity_usdt":capacity,"status":"VERIFIED" if net is not None and capacity is not None else "INSUFFICIENT_DATA",
                          "reason":None if net is not None and capacity is not None else
-                                  ("Capacity bounds/quotes unavailable" if net is not None else "One or both gas costs unavailable")})
+                                  (capacity_error or "Capacity bounds/quotes unavailable" if net is not None else "One or both gas costs unavailable")})
     return rows
 
 
@@ -477,10 +485,7 @@ def calculate_quote_capacity(quote_profit: Callable[[Decimal], Decimal], *,
     # profitable interval using real quote callbacks, then refine its boundary.
     samples = 256
     def net_at(amount: Decimal) -> Decimal:
-        try:
-            return quote_profit(amount)-gas_cost
-        except Exception:
-            return Decimal("-Infinity")
+        return quote_profit(amount)-gas_cost
     grid = [minimum_input + (maximum_input-minimum_input)*Decimal(i)/Decimal(samples)
             for i in range(samples+1)]
     profitable = [i for i, amount in enumerate(grid) if net_at(amount) > 0]
