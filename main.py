@@ -37,7 +37,7 @@ def load_quote_maps(dex: PlunderSwapV3):
 async def run_cycle(dex: PlunderSwapV3, kucoin: KuCoinClient):
     bid, ask = await kucoin.ticker()
     sell_quotes, buy_quotes = await asyncio.to_thread(load_quote_maps, dex)
-    gas_cost = await asyncio.to_thread(dex.gas_cost_usdt)
+    gas_cost = await asyncio.to_thread(dex.gas_cost_usdt, bid)
     opportunities = evaluate_opportunities(
         settings.trade_sizes_zil, sell_quotes, buy_quotes, bid, ask,
         settings.kucoin_fee_rate, settings.min_profit_usdt, gas_cost,
