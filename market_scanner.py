@@ -596,8 +596,11 @@ def write_reports(rows: list[dict[str, Any]], output_dir: str | Path, prefix: st
         writer = csv.DictWriter(handle,fieldnames=columns)
         writer.writeheader()
         for row in rows:
-            writer.writerow({key:json.dumps(serialise(value),ensure_ascii=False) if isinstance(value,(dict,list,tuple)) else serialise(value)
-                             for key,value in row.items()})
+            output_row = {}
+            for key,value in row.items():
+                encoded = serialise(value)
+                output_row[key] = json.dumps(encoded,ensure_ascii=False) if isinstance(encoded,(dict,list,tuple)) else encoded
+            writer.writerow(output_row)
     return json_path,csv_path
 
 
