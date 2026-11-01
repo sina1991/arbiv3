@@ -38,6 +38,12 @@ The required capital inputs are 100, 250, 500, 1,000, 2,500 and 5,000 USDT. For 
 
 Gas USD cost is derived from explicit gas units, current gas price and native-token USD price. Missing inputs must remain null. Capacity must be measured by actual quotes over a liquidity-backed search range; do not substitute the largest profitable test size. The capacity search is an estimate bounded by its configured search interval and should be reported with those bounds.
 
+## Integrated scan
+
+`python main.py --scan` validates each enabled market, obtains the six-size bidirectional V3 quote grid, fetches KuCoin public Level-2 depth for configured CEX routes, estimates gas from Quoter gas units/current gas price/native-token USD price, evaluates both route directions, measures capacity within configured liquidity bounds and writes JSON/CSV reports.
+
+For a market to be eligible, configure and independently verify `token0_usd_price`, `token1_usd_price`, `usd_prices_verified`, `native_token_usd_price`, `native_token_usd_price_verified`, `slippage_bps`, `capacity_search_max_usdt`, and exact `cex.base_token_address` / `cex.quote_token_address` plus `cex.asset_mapping_verified` and fee rate for DEX-CEX. DEX-DEX markets additionally require exact `token_base` and `token_quote` objects. Missing fields keep the route unranked.
+
 ## Ranking and reporting
 
 Only fully verified positive-net opportunities with measured capacity are eligible. Execution slippage is applied as a separate conservative buffer to V3 quote outputs. The score weights are 45% net profit, 35% ROI and 20% capital capacity. JSON and CSV reports must preserve status and rejection/insufficient-data reasons.
