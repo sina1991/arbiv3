@@ -70,3 +70,20 @@ def test_live_requires_explicit_confirmation():
     )
     with pytest.raises(RuntimeError, match="LIVE mode blocked"):
         candidate.validate()
+
+
+def test_size_specific_thresholds_apply_to_both_sizes():
+    rows = evaluate_opportunities(
+        sizes=(D("5"), D("10")),
+        dex_exact_input_sell={D("5"): D("2"), D("10"): D("3")},
+        dex_exact_output_buy={},
+        kucoin_bid=D("0.2"),
+        kucoin_ask=D("0.2"),
+        kucoin_fee=D("0"),
+        minimum_profit={D("5"): D("0.5"), D("10"): D("1.5")},
+        gas_cost_usdt=D("0"),
+    )
+    assert rows[0].zil_size == D("10")
+    assert not rows[0].executable
+    assert rows[1].zil_size == D("5")
+    assert rows[1].executable
