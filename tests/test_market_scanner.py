@@ -45,7 +45,7 @@ def test_unknown_gas_never_produces_net_or_rankable_opportunity():
         quote_asset_usd_price=D("1"),gas_cost_usdt=None,
         status="VERIFIED",asset_mapping_verified=True,usd_prices_verified=True,cex_depth_verified=True,
         cex_sell_base=lambda base:base*D("10.2"),
-        cex_buy_base_with_quote=lambda quote:quote/D("10.3"))
+        cex_buy_base_with_quote=lambda quote:quote/D("10.3"),slippage_bps=30)
     assert len(rows)==2
     assert all(row["net_profit_usdt"] is None for row in rows)
     assert all(row["status"]=="INSUFFICIENT_DATA" for row in rows)
@@ -70,7 +70,7 @@ def test_dex_dex_rejects_cross_chain_or_nonidentical_token_contracts():
     rows=evaluate_dex_dex(market_a=a,market_b=b,capital_sizes_usdt=[D("100")],
         a_quote_to_base=lambda x:x,a_base_to_quote=lambda x:x,
         b_quote_to_base=lambda x:x,b_base_to_quote=lambda x:x,
-        quote_asset_usd_price=D("1"),gas_cost_a_usdt=D("1"),gas_cost_b_usdt=D("1"),usd_prices_verified=True)
+        quote_asset_usd_price=D("1"),gas_cost_a_usdt=D("1"),gas_cost_b_usdt=D("1"),usd_prices_verified=True,slippage_bps=30)
     assert rows[0]["status"]=="REJECTED"
 
 
@@ -82,7 +82,7 @@ def test_dex_dex_unknown_one_leg_gas_is_insufficient_data():
     rows=evaluate_dex_dex(market_a=a,market_b=b,capital_sizes_usdt=[D("100")],
         a_quote_to_base=lambda x:x/D("10"),a_base_to_quote=lambda x:x*D("10"),
         b_quote_to_base=lambda x:x/D("9"),b_base_to_quote=lambda x:x*D("11"),
-        quote_asset_usd_price=D("1"),gas_cost_a_usdt=D(".1"),gas_cost_b_usdt=None,usd_prices_verified=True)
+        quote_asset_usd_price=D("1"),gas_cost_a_usdt=D(".1"),gas_cost_b_usdt=None,usd_prices_verified=True,slippage_bps=30)
     assert len(rows)==2
     assert all(row["net_profit_usdt"] is None for row in rows)
     assert all(row["status"]=="INSUFFICIENT_DATA" for row in rows)
