@@ -106,7 +106,7 @@ async def scan_registry(registry: dict[str, Any], chains: dict[int, dict[str, An
                     direction = (f"{quote_address}->{base_address}" if row["route"]=="DEX_CEX"
                                  else f"{base_address}->{quote_address}")
                     matching = [q for q in quotes if q["capital_usdt"]==row["capital_usdt"]
-                                and q["direction"]==direction]
+                                and q["direction"].lower()==direction.lower()]
                     if matching:
                         row["price_impact_bps"] = matching[0]["price_impact_bps"]
                         row["fee_units"] = matching[0]["fee_units"]
@@ -161,10 +161,10 @@ async def scan_registry(registry: dict[str, Any], chains: dict[int, dict[str, An
                 second_base_address = second_market["token_base"]["address"]
                 second_quote_address = second_market["token_quote"]["address"]
                 first_q = next((q for q in left["quotes"] if q["capital_usdt"]==row["capital_usdt"]
-                                and q["direction"]==f"{first_quote_address}->{first_base_address}"),None) if first_market is ma else next((q for q in right["quotes"] if q["capital_usdt"]==row["capital_usdt"] and q["direction"]==f"{first_quote_address}->{first_base_address}"),None)
+                                and q["direction"].lower()==f"{first_quote_address}->{first_base_address}".lower()),None) if first_market is ma else next((q for q in right["quotes"] if q["capital_usdt"]==row["capital_usdt"] and q["direction"]==f"{first_quote_address}->{first_base_address}"),None)
                 second_ctx = right if second_market is mb else left
                 second_q = next((q for q in second_ctx["quotes"] if q["capital_usdt"]==row["capital_usdt"]
-                                 and q["direction"]==f"{second_base_address}->{second_quote_address}"),None)
+                                 and q["direction"].lower()==f"{second_base_address}->{second_quote_address}".lower()),None)
                 impacts = [q["price_impact_bps"] for q in (first_q,second_q) if q is not None]
                 if impacts:
                     row["price_impact_bps"] = sum(impacts,Decimal(0))
