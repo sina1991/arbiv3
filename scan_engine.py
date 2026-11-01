@@ -22,6 +22,10 @@ def _gas_cost(market: dict[str, Any], quote_rows: list[dict[str, Any]], quoter: 
         return None
     try:
         gas_units = max(int(row["gas_estimate"]) for row in quote_rows)
+        multiplier = Decimal(str(market.get("gas_safety_multiplier","1.2")))
+        if multiplier < 1:
+            return None
+        gas_units = int((Decimal(gas_units)*multiplier).to_integral_value(rounding="ROUND_CEILING"))
         gas_price_wei = int(quoter.w3.eth.gas_price)
         return estimate_gas_cost_usdt(gas_units, gas_price_wei, native_usd)
     except Exception:
@@ -135,8 +139,14 @@ async def scan_registry(registry: dict[str, Any], chains: dict[int, dict[str, An
             gas_a, gas_b = _gas_cost(ma,left["quotes"],qa), _gas_cost(mb,right["quotes"],qb)
             quote_usd_a = Decimal(str(ma["quote_token_usd_price"])) if ma.get("quote_token_usd_price") is not None else Decimal(0)
             quote_usd_b = Decimal(str(mb["quote_token_usd_price"])) if mb.get("quote_token_usd_price") is not None else Decimal(0)
+            price_map_a = {ma["token0"]["address"].lower():Decimal(str(ma["token0_usd_price"])),
+                           ma["token1"]["address"].lower():Decimal(str(ma["token1_usd_price"]))}
+            price_map_b = {mb["token0"]["address"].lower():Decimal(str(mb["token0_usd_price"])),
+                           mb["token1"]["address"].lower():Decimal(str(mb["token1_usd_price"]))}
             usd_ok = (ma.get("usd_prices_verified") is True and mb.get("usd_prices_verified") is True
-                      and quote_usd_a > 0 and quote_usd_a == quote_usd_b)
+                      and quote_usd_a > 0 and quote_usd_a == quote_usd_b
+                      and price_map_a.get(quote_a.lower()) == quote_usd_a
+                      and price_map_b.get(quote_b.lower()) == quote_usd_b)
             bounds = [Decimal(str(m[k])) for m in (ma,mb) for k in ("capacity_search_max_usdt",)
                       if m.get(k) is not None]
             capacity_bound = min(bounds) if len(bounds)==2 else None
@@ -161,7 +171,7 @@ async def scan_registry(registry: dict[str, Any], chains: dict[int, dict[str, An
                 second_base_address = second_market["token_base"]["address"]
                 second_quote_address = second_market["token_quote"]["address"]
                 first_q = next((q for q in left["quotes"] if q["capital_usdt"]==row["capital_usdt"]
-                                and q["direction"].lower()==f"{first_quote_address}->{first_base_address}".lower()),None) if first_market is ma else next((q for q in right["quotes"] if q["capital_usdt"]==row["capital_usdt"] and q["direction"]==f"{first_quote_address}->{first_base_address}"),None)
+                                and q["direction"].lower()==f"{first_quote_address}->{first_base_address}".lower()),None) if first_market is ma else next((q for q in right["quotes"] if q["capital_usdt"]==row["capital_usdt"] and q["direction"].lower()==f"{first_quote_address}->{first_base_address}".lower()),None)
                 second_ctx = right if second_market is mb else left
                 second_q = next((q for q in second_ctx["quotes"] if q["capital_usdt"]==row["capital_usdt"]
                                  and q["direction"].lower()==f"{second_base_address}->{second_quote_address}".lower()),None)
