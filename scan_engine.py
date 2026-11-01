@@ -58,7 +58,8 @@ async def scan_registry(registry: dict[str, Any], chains: dict[int, dict[str, An
                                     "pool":snapshot,"quoter":quoter.address})
             market_context.append({"market":market,"snapshot":snapshot,"quoter":quoter,"quotes":quotes})
         except Exception as exc:
-            validation_rows.append({"market_id":market["id"],"status":"UNVERIFIED",
+            status = "REJECTED" if isinstance(exc,ValueError) else "UNVERIFIED"
+            validation_rows.append({"market_id":market["id"],"status":status,
                                     "reason":f"{type(exc).__name__}: {exc}"})
 
     opportunity_rows: list[dict[str, Any]] = []
@@ -101,6 +102,16 @@ async def scan_registry(registry: dict[str, Any], chains: dict[int, dict[str, An
                     capacity_search_max_usdt=Decimal(str(market["capacity_search_max_usdt"]))
                         if market.get("capacity_search_max_usdt") is not None else None,
                 )
+                for row in rows:
+                    direction = (f"{quote_address}->{base_address}" if row["route"]=="DEX_CEX"
+                                 else f"{base_address}->{quote_address}")
+                    matching = [q for q in quotes if q["capital_usdt"]==row["capital_usdt"]
+                                and q["direction"]==direction]
+                    if matching:
+                        row["price_impact_bps"] = matching[0]["price_impact_bps"]
+                        row["fee_units"] = matching[0]["fee_units"]
+                        row["pool_liquidity"] = matching[0]["pool_liquidity"]
+                        row["tick_before"] = matching[0]["tick_before"]
                 opportunity_rows.extend(rows)
             except Exception as exc:
                 opportunity_rows.append({"route":"DEX_CEX","market_a":market["id"],
@@ -140,6 +151,25 @@ async def scan_registry(registry: dict[str, Any], chains: dict[int, dict[str, An
                 gas_cost_a_usdt=gas_a,gas_cost_b_usdt=gas_b,
                 usd_prices_verified=usd_ok,slippage_bps=slip,
                 capacity_search_max_usdt=capacity_bound)
+            for row in route_rows:
+                if row.get("capital_usdt") is None:
+                    continue
+                first_market = ma if row["market_a"]==ma["id"] else mb
+                second_market = mb if row["market_b"]==mb["id"] else ma
+                first_quote_address = first_market["token_quote"]["address"]
+                first_base_address = first_market["token_base"]["address"]
+                second_base_address = second_market["token_base"]["address"]
+                second_quote_address = second_market["token_quote"]["address"]
+                first_q = next((q for q in left["quotes"] if q["capital_usdt"]==row["capital_usdt"]
+                                and q["direction"]==f"{first_quote_address}->{first_base_address}"),None) if first_market is ma else next((q for q in right["quotes"] if q["capital_usdt"]==row["capital_usdt"] and q["direction"]==f"{first_quote_address}->{first_base_address}"),None)
+                second_ctx = right if second_market is mb else left
+                second_q = next((q for q in second_ctx["quotes"] if q["capital_usdt"]==row["capital_usdt"]
+                                 and q["direction"]==f"{second_base_address}->{second_quote_address}"),None)
+                impacts = [q["price_impact_bps"] for q in (first_q,second_q) if q is not None]
+                if impacts:
+                    row["price_impact_bps"] = sum(impacts,Decimal(0))
+                    row["pool_liquidity_a"] = first_q.get("pool_liquidity") if first_q else None
+                    row["pool_liquidity_b"] = second_q.get("pool_liquidity") if second_q else None
             opportunity_rows.extend(route_rows)
         except Exception as exc:
             opportunity_rows.append({"route":"DEX_DEX","market_a":ma["id"],"market_b":mb["id"],
