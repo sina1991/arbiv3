@@ -61,7 +61,7 @@ Validation outputs are written to `reports/` in JSON and CSV. A successful deplo
 
 ## PlunderSwap reference
 
-The WZIL/zUSDT market on Zilliqa remains `UNVERIFIED`, disabled and reference-only. Known Router, Pool, token addresses and fee are retained as reference metadata. Factory and QuoterV2 are deliberately unset. WZIL and KuCoin ZIL are not assumed equivalent. No ranking is allowed until all independent checks pass.
+The WZIL/zUSDT market on Zilliqa remains `UNVERIFIED`, disabled and reference-only. Known Router, Pool, token addresses and fee are retained as reference metadata. Official PlunderSwap developer documentation provides Factory and QuoterV2 deployment addresses; these are configured as candidates but remain unverified against the current RPC. WZIL and KuCoin ZIL are not assumed equivalent. No ranking is allowed until all independent checks pass.
 
 ## Tests
 
