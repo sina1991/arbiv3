@@ -281,7 +281,7 @@ def test_seven_networks_have_chain_specific_uniswap_v3_reference_deployments():
         assert Web3.is_address(deployment["quoter_v2"])
         assert Web3.is_address(deployment["router02"])
         assert deployment["fee_tiers"]==[100,500,3000,10000]
-        assert deployment["deployment_status"]=="OFFICIAL_REFERENCE_UNVERIFIED"
+        assert deployment["deployment_status"]=="V3_DEPLOYMENT_VERIFIED"\n        assert deployment["verified_block"] > 0\n        assert deployment["verified_at"].startswith("2026-11-01")
         assert deployment["deployment_source"].startswith("https://")
     # Configuring official references is not a live on-chain verification.
     assert all(c["status"]=="UNVERIFIED" for c in registry["chains"])
