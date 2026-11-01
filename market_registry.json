@@ -30,7 +30,10 @@
       "name": "zilliqa",
       "rpc_env": "ZILLIQA_RPC_URL",
       "native_symbol": "ZIL",
-      "status": "UNVERIFIED"
+      "status": "UNVERIFIED",
+      "rpc_status": "VERIFIED",
+      "rpc_chain_id": 32769,
+      "rpc_checked_at": "2026-11-01T18:30:43Z"
     },
     {
       "id": 1,
