@@ -142,7 +142,8 @@
       "native_token_usd_price_verified": false,
       "gas_safety_multiplier": "1.2",
       "slippage_bps": 30,
-      "capacity_search_max_usdt": null
+      "capacity_search_max_usdt": null,
+      "slot0_fee_protocol_type": "uint32"
     }
   ]
 }
