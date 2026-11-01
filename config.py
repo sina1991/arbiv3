@@ -51,9 +51,6 @@ class Settings:
     max_price_age: int = _int("MAX_PRICE_AGE_SECONDS", "5")
     gas_limit: int = _int("GAS_LIMIT", "450000")
     gas_multiplier: Decimal = _decimal("GAS_MULTIPLIER", "1.5")
-    gas_price_zil_usdt: Decimal | None = (
-        _decimal("ZIL_USDT_GAS_PRICE", "0") if os.getenv("ZIL_USDT_GAS_PRICE") else None
-    )
 
     telegram_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
@@ -61,17 +58,21 @@ class Settings:
     def validate(self) -> None:
         if self.trading_mode not in {"DRY_RUN", "LIVE"}:
             raise ValueError("TRADING_MODE must be DRY_RUN or LIVE")
+        if not self.wallet_address:
+            raise RuntimeError("WALLET_ADDRESS is required for router-based V3 quotes")
         if self.trading_mode == "LIVE":
             if self.live_confirmation != "I_UNDERSTAND_REAL_ORDERS":
                 raise RuntimeError("LIVE mode blocked: set LIVE_TRADING_CONFIRM=I_UNDERSTAND_REAL_ORDERS")
-            if not self.wallet_private_key or not self.wallet_address:
-                raise RuntimeError("LIVE mode requires WALLET_ADDRESS and WALLET_PRIVATE_KEY")
+            if not self.wallet_private_key:
+                raise RuntimeError("LIVE mode requires WALLET_PRIVATE_KEY")
             if not all((self.kucoin_key, self.kucoin_secret, self.kucoin_passphrase)):
                 raise RuntimeError("LIVE mode requires KuCoin API credentials")
         if not (0 < self.v3_fee < 1_000_000):
             raise ValueError("PLUNDERSWAP_V3_FEE must be a valid V3 fee value")
         if not (0 <= self.slippage_bps < 10_000):
             raise ValueError("SLIPPAGE_BPS must be between 0 and 9999")
+        if self.gas_limit <= 0 or self.gas_multiplier <= 0:
+            raise ValueError("Gas limit and multiplier must be positive")
         if not self.trade_sizes_zil or any(size <= 0 for size in self.trade_sizes_zil):
             raise ValueError("TRADE_SIZES_ZIL must contain positive amounts")
 
