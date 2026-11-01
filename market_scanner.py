@@ -205,7 +205,9 @@ class V3QuoterV2:
             raise ValueError("QuoterV2 returned a non-positive output or price")
         amount_out = from_raw(raw_out, decimals_out)
         effective = amount_out / amount_in
-        impact = max(Decimal(0), (Decimal(1) - effective / spot) * Decimal(10_000))
+        fee_factor = Decimal(1) - Decimal(snapshot.fee) / Decimal(1_000_000)
+        effective_without_fee = effective / fee_factor
+        impact = max(Decimal(0), (Decimal(1) - effective_without_fee / spot) * Decimal(10_000))
         block = self.w3.eth.get_block("latest")
         return V3Quote(token_in, token_out, amount_in, amount_out, effective, spot,
                        impact, ticks_crossed, gas_estimate, int(block["number"]),
@@ -533,6 +535,7 @@ def quote_capital_grid(snapshot: V3PoolSnapshot, quoter: V3QuoterV2, *,
                          "price_impact_bps":quote.price_impact_bps,
                          "initialized_ticks_crossed":quote.initialized_ticks_crossed,
                          "gas_estimate":quote.gas_estimate,"fee_units":quote.fee_units,
+                         "fee_bps":Decimal(quote.fee_units)/Decimal(100),
                          "tick_before":quote.tick_before,"sqrt_price_x96_after":quote.sqrt_price_x96_after,
                          "pool_liquidity":snapshot.liquidity,"pool_snapshot_block":snapshot.block_number,
                          "block_number":quote.block_number,"timestamp_utc":quote.timestamp_utc,
