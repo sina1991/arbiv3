@@ -76,7 +76,7 @@ def test_dex_dex_rejects_cross_chain_or_nonidentical_token_contracts():
 
 
 def test_dex_dex_unknown_one_leg_gas_is_insufficient_data():
-    a={"id":"a","chain_id":1,"token_base":{"address":"0x"+"11"*20,"decimals":18},
+    a={"id":"a","chain_id":1,"status":"VERIFIED","enabled":True,"token_base":{"address":"0x"+"11"*20,"decimals":18},
        "token_quote":{"address":"0x"+"22"*20,"decimals":6}}
     b={"id":"b","chain_id":1,"status":"VERIFIED","enabled":True,"token_base":{"address":"0x"+"11"*20,"decimals":18},
        "token_quote":{"address":"0x"+"22"*20,"decimals":6}}
