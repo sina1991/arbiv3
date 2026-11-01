@@ -8,7 +8,7 @@ from web3 import Web3
 from market_scanner import (
     CAPITAL_SIZES_USDT, V3PoolValidator, V3QuoterV2, V3PoolSnapshot, calculate_quote_capacity,
     evaluate_dex_cex, evaluate_dex_dex, from_raw, load_registry,
-    rank_opportunities, to_raw, estimate_gas_cost_usdt,
+    rank_opportunities, to_raw, estimate_gas_cost_usdt, POOL_ABI, POOL_ABI_UINT32_FEE_PROTOCOL,
     simulate_sell_base_into_bids, simulate_buy_base_with_quote,
 )
 
@@ -264,3 +264,8 @@ def test_integrated_scan_emits_reports_without_enabled_markets(tmp_path):
     assert report["verified_market_count"]==0
     assert (tmp_path/"scan_report.json").exists()
     assert (tmp_path/"scan_report.csv").exists()
+
+
+def test_pool_slot0_fee_protocol_abi_is_explicit_per_deployment():
+    assert POOL_ABI[-1]["outputs"][5]["type"]=="uint8"
+    assert POOL_ABI_UINT32_FEE_PROTOCOL[-1]["outputs"][5]["type"]=="uint32"
