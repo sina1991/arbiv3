@@ -53,7 +53,7 @@ Validation outputs are written to `reports/` in JSON and CSV. `--scan` runs all 
 
 ## V3 architecture
 
-- `V3PoolValidator`: chain ID, deployed contracts, Factory.getPool, pool.factory, token0/token1, decimals, fee, tickSpacing, slot0, active liquidity and block timestamp.
+- `V3PoolValidator`: chain ID, deployed contracts, Factory.getPool, pool.factory, token0/token1, decimals, fee, factory tickSpacing, configurable slot0 ABI, active liquidity and block timestamp.
 - `V3QuoterV2`: V3 QuoterV2 exact-input quote with output, post-swap sqrtPriceX96, initialized ticks crossed and gas estimate.
 - `quote_capital_grid`: six USD-equivalent capital sizes in both directions, requiring independent USD prices for both tokens.
 - `calculate_quote_capacity`: quote-driven search over a supplied liquidity-backed capital bound; it is not the maximum profitable sample size.
