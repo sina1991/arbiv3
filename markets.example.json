@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "description": "Explicitly verified pool and quote-adapter registry. Do not auto-trust discovered pools.",
+  "markets": [
+    {
+      "id": "plunderswap-v3-wzil-zusdt",
+      "chain": "zilliqa",
+      "dex": "plunderswap",
+      "version": "v3",
+      "pool_address": "0xD9969Fac78afC7C696443802C0b8cFf1b1B45Fc8",
+      "token0": {
+        "symbol": "zUSDT",
+        "address": "0x2274005778063684fbB1BfA96a2b725dc37d75f9",
+        "decimals": 6
+      },
+      "token1": {
+        "symbol": "WZIL",
+        "address": "0x94e18aE7dd5eE57B55f30c4B63E2760c09EFb192",
+        "decimals": 18
+      },
+      "fee": {
+        "kind": "v3_fee_units",
+        "value": 100
+      },
+      "cex": {
+        "exchange": "kucoin",
+        "symbol": "ZIL-USDT",
+        "base_asset": "ZIL",
+        "quote_asset": "USDT"
+      },
+      "quote_adapter": {
+        "kind": "v3_quoter_v2",
+        "address": "",
+        "verified": false
+      },
+      "enabled": false,
+      "status": "needs_quote_verification",
+      "reason": "Existing reference pool; exact-input quote and market integrity have not yet been independently verified."
+    }
+  ]
+}

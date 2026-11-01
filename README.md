@@ -1,40 +1,42 @@
-# arbiV3
+# arbiV3 — Multi-Market Arbitrage Research Scanner
 
-A standalone ZIL-USDT cross-exchange arbitrage bot using **PlunderSwap V3 only** and KuCoin spot markets.
+A **DRY_RUN-only** market discovery and arbitrage research framework. It is designed to test the same pre-funded arbitrage model across multiple EVM networks, DEX pools and centralized-exchange order books, then rank opportunities by profit and tested capital capacity.
 
-## Supported market and routes
+**This project has no trading capability.** It contains no wallet private-key configuration, transaction signing, transaction broadcasting, token approvals, DEX swap submission, or CEX order submission.
 
-- DEX market: WZIL / zUSDT on the configured PlunderSwap V3 pool.
-- CEX market: ZIL-USDT on KuCoin.
-- Buy WZIL on PlunderSwap V3 (exact output), then sell ZIL on KuCoin.
-- Buy ZIL on KuCoin, then sell WZIL on PlunderSwap V3 (exact input).
+## Requested capital points
 
-## Safety modes
+The scanner uses these quote-currency budgets by default:
 
-The default is `DRY_RUN`. It reads market data, obtains V3 quotes by calling the configured V3 router through `eth_call`, evaluates balances and estimated profitability, and logs candidate trades. It does not sign or broadcast blockchain transactions and does not submit KuCoin orders.
+`100, 250, 500, 1000, 2500, 5000 USDT`
 
-Real trading requires both:
-```dotenv
-TRADING_MODE=LIVE
-LIVE_TRADING_CONFIRM=I_UNDERSTAND_REAL_ORDERS
-```
-Live mode can submit real orders and spend real assets. Start with DRY_RUN and verify the pool, router, token addresses, decimals, fee tier, wallet, allowances, and KuCoin account before enabling it.
+Change them with `TRADE_SIZES_USDT`. Both comparison families are supported by the pure evaluation engine:
 
-## Important execution model
+- **DEX-CEX:** DEX buy → CEX sell, and CEX buy → DEX sell.
+- **DEX-DEX:** buy on one pool → sell on another pool for the same pair on the same chain.
 
-This is pre-funded cross-exchange arbitrage: WZIL and zUSDT must already be available in the PlunderSwap wallet, while ZIL and USDT must already be available in KuCoin. The bot does not transfer assets between venues.
+Cross-chain pools are discovered independently. Cross-chain arbitrage is not ranked as a tradable route because bridge costs, transfer latency, inventory availability and settlement risk are not modeled.
 
-The two venue trades are not atomic. A successful trade on one venue followed by a failure on the other can leave inventory unbalanced. Live execution verifies KuCoin order fills and on-chain receipts; if the second leg fails or is partial, the process halts for manual reconciliation instead of automatically retrying. It cannot guarantee a hedge. Use conservative sizes and monitor inventory.
+## Current implementation status
 
-The zUSDT proceeds/cost are compared 1:1 with USDT for the estimate. A zUSDT depeg, redemption limitation, or liquidity discount is not currently modeled.
+1. GeckoTerminal discovery across configured networks.
+2. Pool metadata normalization: chain, DEX, token addresses/symbols, liquidity and 24-hour volume.
+3. Liquidity and quote-token candidate filters.
+4. Exact-input quote interface with a constant-product V2 implementation.
+5. Read-only Uniswap V3-compatible QuoterV2 adapter. The Quoter address and fee must be verified and explicitly configured for each deployment; no addresses are guessed.
+6. DEX-CEX evaluation using CEX order-book depth rather than only best bid/ask.
+7. Same-chain DEX-DEX evaluation using exact-size quotes.
+8. Transparent ranking based on normalized net profit (55%), tested profitable capital capacity (30%) and ROI (15%).
 
-## V3 quoting
+The first scanner run is **discovery-first**. It writes `reports/latest-markets.json`. It does not invent profit scores from spot prices. A market enters ranking only after its RPC, pool, token decimals, fee model, quote adapter and CEX symbol mapping have been verified and connected to the quote engine.
 
-Quotes are requested from the PlunderSwap V3 router using read-only `eth_call` against `exactInputSingle` and `exactOutputSingle`. This delegates tick traversal and pool fee application to the deployed contract rather than approximating a swap from the current `sqrtPriceX96` and active liquidity. A quote can fail if the wallet lacks the required token balance/allowance or if the router/pool configuration is wrong; failures are treated as unavailable quotes, never as zero-cost opportunities.
+## Reference market
+
+The current PlunderSwap V3 WZIL/zUSDT market remains in `markets.example.json` as the reference configuration. It is deliberately disabled for ranking until the Quoter and exact-input behavior are verified. The existing router is not used as a quote engine.
 
 ## Setup
 
-Python 3.11+
+Python 3.11+:
 
 ```bash
 python -m venv .venv
@@ -43,7 +45,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Fill in the RPC endpoint, KuCoin credentials, and wallet address. The wallet private key is only required for LIVE mode. Never commit `.env`. The wallet must already hold the relevant assets and have sufficient token allowances granted to the configured router; the bot does not issue approvals automatically. Router-based quotes can fail when the wallet has insufficient balance or allowance.
+Configure `SCANNER_NETWORKS`, capital sizes and discovery filters in `.env`. Add only verified RPC endpoints and market configurations to the local configuration. Never commit credentials or private keys.
 
 ## Run
 
@@ -51,21 +53,23 @@ Fill in the RPC endpoint, KuCoin credentials, and wallet address. The wallet pri
 python main.py
 ```
 
-Set `TRADING_MODE=DRY_RUN` for safe observation. The bot refuses LIVE mode unless the explicit confirmation variable is also set.
+The discovery report is written to `reports/latest-markets.json`. The scanner logs network-level discovery failures without treating a failed network as an empty market.
 
-## Configuration notes
+## Quote and ranking rules
 
-- The configured PlunderSwap V3 fee is expressed in V3 fee units (1,000,000 = 100%), not basis points. The default `100` corresponds to 0.01%; startup verifies it against the configured pool.
-- WZIL uses 18 decimals and zUSDT uses 6 decimals in the current configuration; verify on-chain.
-- The default per-size minimum-profit thresholds preserve the previous V3 strategy: 0.08, 0.18, 0.40 and 1.00 USDT for 5k, 10k, 15k and 25k ZIL respectively. The strategy prioritizes the largest size that passes all checks.
-- The KuCoin market order uses ZIL quantity. The implementation checks final order status and filled size rather than treating order acceptance as a completed fill.
-- Estimated network gas is converted to USDT using the current KuCoin ZIL bid. Gas cost uses the configured gas limit and multiplier, so treat it as a conservative estimate, not a guarantee of realized gas expenditure.
-- Market profitability uses best bid/ask and does not yet model full order-book depth or guarantee execution at those prices.
+- Pool reserve/liquidity and 24-hour volume are discovery filters, not executable depth.
+- V2 quotes use the configured pool reserves, token decimals and explicitly supplied fee in basis points.
+- V3 quotes use a deployment-verified QuoterV2 address and the pool's actual V3 fee units.
+- CEX fills are simulated against visible order-book levels and stop when the requested size exceeds displayed depth.
+- DEX-DEX routes are restricted to pools with the same base/quote token addresses on the same chain.
+- Gas must be supplied as a verified estimate in the same quote currency before an opportunity is considered complete.
+- zUSDT is not assumed to be equivalent to USDT without an explicit depeg/price validation policy.
 
 ## Tests
 
 ```bash
+python -m compileall -q .
 python -m pytest -q
 ```
 
-Tests cover pure arbitrage arithmetic and safety-mode behavior. They do not replace fork testing or small-value live validation.
+Tests cover quote arithmetic, order-book depth simulation, route calculations, capital-size ranking and discovery normalization. They do not certify any live market or external contract deployment.

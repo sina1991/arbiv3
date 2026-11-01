@@ -1,30 +1,62 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from decimal import Decimal
-from enum import Enum
-
-
-class Direction(str, Enum):
-    BUY_WZIL_ON_DEX_SELL_ZIL_ON_CEX = "BUY_WZIL_ON_DEX_SELL_ZIL_ON_CEX"
-    BUY_ZIL_ON_CEX_SELL_WZIL_ON_DEX = "BUY_ZIL_ON_CEX_SELL_WZIL_ON_DEX"
 
 
 @dataclass(frozen=True)
-class V3Quote:
-    amount_in: int
-    amount_out: int
-    token_in: str
-    token_out: str
+class Token:
+    chain: str
+    address: str
+    symbol: str
+    name: str = ""
+    decimals: int | None = None
+
+
+@dataclass(frozen=True)
+class PoolCandidate:
+    chain: str
+    pool_address: str
+    dex_id: str
+    dex_name: str
+    base_token: Token
+    quote_token: Token
+    liquidity_usd: Decimal
+    volume_24h_usd: Decimal
+    price_usd: Decimal | None
+    url: str | None = None
+
+
+@dataclass(frozen=True)
+class OrderBook:
+    bids: tuple[tuple[Decimal, Decimal], ...]
+    asks: tuple[tuple[Decimal, Decimal], ...]
+    observed_at: float
 
 
 @dataclass(frozen=True)
 class Opportunity:
-    direction: Direction
-    zil_size: Decimal
-    dex_input_usdt: Decimal
-    dex_output_usdt: Decimal
-    kucoin_buy_cost_usdt: Decimal
-    kucoin_sell_proceeds_usdt: Decimal
-    estimated_profit_usdt: Decimal
-    gas_cost_usdt: Decimal | None
-    executable: bool
-    reason: str
+    route_type: str
+    route_id: str
+    chain: str
+    base_symbol: str
+    quote_symbol: str
+    budget_usdt: Decimal
+    base_amount: Decimal
+    quote_proceeds: Decimal
+    net_profit_usdt: Decimal
+    roi_percent: Decimal
+    gas_cost_usdt: Decimal
+    liquidity_usd: Decimal
+    volume_24h_usd: Decimal
+    quote_age_seconds: Decimal
+    profitable: bool
+    notes: str = ""
+
+
+@dataclass(frozen=True)
+class RankedOpportunity:
+    opportunity: Opportunity
+    max_profitable_capital_usdt: Decimal
+    score: Decimal
+    rank: int = 0
