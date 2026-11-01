@@ -12,7 +12,8 @@ Each enabled market must specify:
 - pool fee in native uint24 V3 fee units
 - token USD price sources when USD-denominated capital sizing is required
 - CEX symbol and independently verified asset mapping for DEX-CEX
-- gas estimation inputs and liquidity-backed capacity search bound
+- gas estimation inputs, explicit execution slippage bound and liquidity-backed capacity search bound
+- KuCoin Level-2 depth for CEX legs; top-of-book alone is not sufficient
 
 A market is enabled only when Factory.getPool(tokenA, tokenB, fee) returns the configured pool, pool.factory matches the factory, token0/token1 and fee match, slot0/liquidity are valid, and the configured QuoterV2 successfully quotes both directions with the expected ABI.
 
@@ -39,7 +40,7 @@ Gas USD cost is derived from explicit gas units, current gas price and native-to
 
 ## Ranking and reporting
 
-Only fully verified positive-net opportunities with measured capacity are eligible. The score weights are 45% net profit, 35% ROI and 20% capital capacity. JSON and CSV reports must preserve status and rejection/insufficient-data reasons.
+Only fully verified positive-net opportunities with measured capacity are eligible. Execution slippage is applied as a separate conservative buffer to V3 quote outputs. The score weights are 45% net profit, 35% ROI and 20% capital capacity. JSON and CSV reports must preserve status and rejection/insufficient-data reasons.
 
 ## PlunderSwap WZIL/zUSDT
 
