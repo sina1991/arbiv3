@@ -2,7 +2,7 @@ from decimal import Decimal as D
 
 import pytest
 
-from market_scanner import load_registry, rank_opportunities
+from market_scanner import load_registry, rank_opportunities, V2PoolQuoter
 
 
 def test_registry_contains_requested_capital_sizes_and_both_routes():
@@ -45,6 +45,5 @@ def test_unpriced_gas_and_nonpositive_net_profit_are_not_ranked():
 
 
 def test_v2_fee_units_reject_invalid_basis_points():
-    from market_scanner import V2PoolQuoter
     with pytest.raises(ValueError, match="fee_bps"):
-        V2PoolQuoter.__new__(V2PoolQuoter).fee_bps = 10001
+        V2PoolQuoter(None, "0x0000000000000000000000000000000000000001", 10001)
