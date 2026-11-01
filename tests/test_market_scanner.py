@@ -285,7 +285,7 @@ def test_seven_networks_have_chain_specific_uniswap_v3_reference_deployments():
         assert deployment["verified_block"] > 0
         assert deployment["verified_at"].startswith("2026-11-01")
         assert deployment["deployment_source"].startswith("https://")
-    # Configuring official references is not a live on-chain verification.
+    # Deployment verification does not imply a verified token-pair market.
     assert all(c["status"]=="UNVERIFIED" for c in registry["chains"])
 
 
