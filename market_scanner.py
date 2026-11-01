@@ -49,6 +49,8 @@ QUOTER_V2_ABI = [
      "outputs":[{"name":"amountOut","type":"uint256"},{"name":"sqrtPriceX96After","type":"uint160"},
                 {"name":"initializedTicksCrossed","type":"uint32"},{"name":"gasEstimate","type":"uint256"}]},
 ]
+POOL_ABI_UINT32_FEE_PROTOCOL = json.loads(json.dumps(POOL_ABI))
+POOL_ABI_UINT32_FEE_PROTOCOL[-1]["outputs"][5]["type"] = "uint32"
 
 
 def _address(value: str) -> str:
@@ -119,7 +121,8 @@ class V3PoolValidator:
         self.w3 = web3
 
     def validate(self, *, expected_chain_id: int, factory_address: str,
-                 pool_address: str, token_a: str, token_b: str, fee: int) -> V3PoolSnapshot:
+                 pool_address: str, token_a: str, token_b: str, fee: int,
+                 slot0_fee_protocol_type: str = "uint8") -> V3PoolSnapshot:
         if int(self.w3.eth.chain_id) != int(expected_chain_id):
             raise ValueError(f"Chain ID mismatch: expected {expected_chain_id}, got {self.w3.eth.chain_id}")
         if not 0 <= int(fee) < 1_000_000:
@@ -132,8 +135,11 @@ class V3PoolValidator:
                                ("tokenA", token_a), ("tokenB", token_b)):
             if not self.w3.eth.get_code(address):
                 raise ValueError(f"{label} has no deployed bytecode: {address}")
+        if slot0_fee_protocol_type not in {"uint8","uint32"}:
+            raise ValueError("Unsupported slot0 feeProtocol ABI type")
         factory = self.w3.eth.contract(address=factory_address, abi=FACTORY_ABI)
-        pool = self.w3.eth.contract(address=pool_address, abi=POOL_ABI)
+        pool_abi = POOL_ABI_UINT32_FEE_PROTOCOL if slot0_fee_protocol_type == "uint32" else POOL_ABI
+        pool = self.w3.eth.contract(address=pool_address, abi=pool_abi)
         factory_reported = _address(factory.functions.getPool(token_a, token_b, int(fee)).call())
         if factory_reported.lower() != pool_address.lower():
             raise ValueError("Factory getPool(tokenA, tokenB, fee) does not match configured pool")
@@ -641,7 +647,8 @@ def verify_market(market: dict[str, Any], chain: dict[str, Any]) -> tuple[V3Pool
     snapshot = V3PoolValidator(w3).validate(
         expected_chain_id=int(chain["id"]),factory_address=market["factory"],
         pool_address=market["pool"],token_a=market["token0"]["address"],
-        token_b=market["token1"]["address"],fee=int(market["fee"]))
+        token_b=market["token1"]["address"],fee=int(market["fee"]),
+        slot0_fee_protocol_type=str(market.get("slot0_fee_protocol_type","uint8")))
     if (market["token0"]["address"].lower() != snapshot.token0.lower()
             or market["token1"]["address"].lower() != snapshot.token1.lower()):
         raise ValueError("Configured token0/token1 ordering differs from on-chain pool ordering")
