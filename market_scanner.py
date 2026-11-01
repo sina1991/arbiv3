@@ -521,6 +521,28 @@ def write_reports(rows: list[dict[str, Any]], output_dir: str | Path, prefix: st
     return json_path,csv_path
 
 
+def verify_network_connectivity(chains: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Check configured RPC reachability and chain ID; this does not certify any DEX."""
+    reports = []
+    for chain in chains:
+        try:
+            rpc = rpc_for_chain(chain)
+            w3 = Web3(Web3.HTTPProvider(rpc, request_kwargs={"timeout": 10}))
+            if not w3.is_connected():
+                raise ConnectionError("RPC is not reachable")
+            actual = int(w3.eth.chain_id)
+            expected = int(chain["id"])
+            reports.append({"chain":chain["name"],"expected_chain_id":expected,
+                            "actual_chain_id":actual,
+                            "status":"RPC_VERIFIED" if actual == expected else "REJECTED",
+                            "reason":None if actual == expected else "Chain ID mismatch"})
+        except Exception as exc:
+            reports.append({"chain":chain["name"],"expected_chain_id":int(chain["id"]),
+                            "actual_chain_id":None,"status":"UNVERIFIED",
+                            "reason":f"{type(exc).__name__}: {exc}"})
+    return reports
+
+
 def verify_market(market: dict[str, Any], chain: dict[str, Any]) -> tuple[V3PoolSnapshot,V3QuoterV2]:
     rpc = os.getenv(chain["rpc_env"],"").strip()
     if not rpc:
