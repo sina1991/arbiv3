@@ -11,14 +11,10 @@ class Settings:
     registry_path: str = os.getenv("MARKET_REGISTRY_PATH", "market_registry.json")
     check_interval: int = int(os.getenv("CHECK_INTERVAL_SECONDS", "15"))
     kucoin_base_url: str = os.getenv("KUCOIN_BASE_URL", "https://api.kucoin.com")
-    kucoin_fee_rate: str = os.getenv("KUCOIN_FEE_RATE", "0.001")
 
     def validate(self) -> None:
         if self.check_interval < 1:
             raise ValueError("CHECK_INTERVAL_SECONDS must be positive")
-        fee = float(self.kucoin_fee_rate)
-        if not 0 <= fee < 1:
-            raise ValueError("KUCOIN_FEE_RATE must be in [0, 1)")
 
 
 settings = Settings()
