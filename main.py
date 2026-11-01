@@ -9,7 +9,7 @@ from pathlib import Path
 
 from market_scanner import (
     CAPITAL_SIZES_USDT, discover_dexscreener_pairs, load_registry, rpc_for_chain,
-    serialise, verify_market, write_reports,
+    serialise, verify_market, verify_network_connectivity, write_reports,
 )
 
 logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
@@ -23,6 +23,7 @@ async def run() -> None:
     parser.add_argument("--min-liquidity",default=None)
     parser.add_argument("--min-volume",default=None)
     parser.add_argument("--validate",metavar="MARKET_ID",help="Validate configured V3 factory, pool and QuoterV2 on-chain")
+    parser.add_argument("--check-networks",action="store_true",help="Check configured RPC connectivity and chain IDs")
     parser.add_argument("--output-dir",default="reports")
     args=parser.parse_args()
     registry=load_registry(args.registry)
@@ -37,6 +38,13 @@ async def run() -> None:
         json_path,csv_path=write_reports(candidates,args.output_dir,"discovery_candidates")
         print(json.dumps(candidates,indent=2,ensure_ascii=False))
         log.info("Discovery-only candidates: %d | %s | %s",len(candidates),json_path,csv_path)
+        return
+
+    if args.check_networks:
+        rows=verify_network_connectivity(registry["chains"])
+        json_path,csv_path=write_reports(rows,args.output_dir,"network_validation")
+        print(json.dumps(rows,indent=2,ensure_ascii=False))
+        log.info("RPC checks do not imply V3 DEX support. Reports: %s | %s",json_path,csv_path)
         return
 
     if args.validate:
