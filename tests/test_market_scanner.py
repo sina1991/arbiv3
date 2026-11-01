@@ -269,3 +269,35 @@ def test_integrated_scan_emits_reports_without_enabled_markets(tmp_path):
 def test_pool_slot0_fee_protocol_abi_is_explicit_per_deployment():
     assert POOL_ABI[-1]["outputs"][5]["type"]=="uint8"
     assert POOL_ABI_UINT32_FEE_PROTOCOL[-1]["outputs"][5]["type"]=="uint32"
+
+
+def test_seven_networks_have_chain_specific_uniswap_v3_reference_deployments():
+    registry=load_registry()
+    required={"ethereum","bsc","polygon","arbitrum","base","optimism","avalanche"}
+    configured={c["name"]:c.get("v3_deployments") for c in registry["chains"] if c.get("v3_deployments")}
+    assert set(configured)==required
+    for name,deployment in configured.items():
+        assert Web3.is_address(deployment["factory"])
+        assert Web3.is_address(deployment["quoter_v2"])
+        assert Web3.is_address(deployment["router02"])
+        assert deployment["fee_tiers"]==[100,500,3000,10000]
+        assert deployment["deployment_status"]=="OFFICIAL_REFERENCE_UNVERIFIED"
+        assert deployment["deployment_source"].startswith("https://")
+    # Configuring official references is not a live on-chain verification.
+    assert all(c["status"]=="UNVERIFIED" for c in registry["chains"])
+
+
+def test_v3_deployment_checker_does_not_claim_unconfigured_chain_support():
+    from market_scanner import verify_v3_deployments
+    rows=verify_v3_deployments([{"id":32769,"name":"zilliqa"}])
+    assert rows==[{"chain":"zilliqa","chain_id":32769,"status":"NOT_CONFIGURED",
+                   "reason":"No official Uniswap V3 deployment configured for this chain."}]
+
+
+def test_v3_candidate_discovery_marks_missing_chain_deployment():
+    from market_scanner import discover_and_validate_v3_candidates
+    rows=discover_and_validate_v3_candidates(
+        [{"chain":"zilliqa","pair_address":"0x"+"11"*20}],
+        [{"id":32769,"name":"zilliqa"}])
+    assert rows[0]["status"]=="NOT_CONFIGURED"
+    assert rows[0]["enabled"] if "enabled" in rows[0] else True
