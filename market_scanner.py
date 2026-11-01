@@ -54,8 +54,8 @@ POOL_ABI_UINT32_FEE_PROTOCOL[-1]["outputs"][5]["type"] = "uint32"
 
 
 def configure_chain_middleware(web3: Web3, chain_id: int) -> None:
-    """Install the POA extraData middleware required by Polygon RPC block headers."""
-    if int(chain_id) != 137:
+    """Install POA extraData middleware required by Polygon and BNB Smart Chain RPC block headers."""
+    if int(chain_id) not in {56, 137}:
         return
     try:
         from web3.middleware import ExtraDataToPOAMiddleware as poa_middleware
