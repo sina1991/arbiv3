@@ -51,7 +51,7 @@ Only fully verified positive-net opportunities with measured capacity are eligib
 
 ## PlunderSwap WZIL/zUSDT
 
-The reference pool remains disabled. Official PlunderSwap developer documentation provides Factory and QuoterV2 deployment addresses; they are configured as candidates but are not yet independently validated against the current RPC. The router is reference metadata only, not a quote contract. KuCoin ZIL-USDT is not proof that WZIL is interchangeable with ZIL.
+The reference pool remains disabled. The Factory, Pool, token ordering/decimals, fee tier, tick spacing, slot0 ABI, liquidity and bidirectional QuoterV2 probes have been verified against the supplied Zilliqa RPC. The market remains disabled because WZIL-to-KuCoin-ZIL mapping and the remaining economic inputs are not verified. The router is reference metadata only, not a quote contract. KuCoin ZIL-USDT is not proof that WZIL is interchangeable with ZIL.
 
 ## Safety
 
