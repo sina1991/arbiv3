@@ -41,7 +41,7 @@ class KuCoinClient:
             raise ValueError("KuCoin public L2 depth must be 20 or 100")
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15))
-        endpoint = f"/api/v3/market/orderbook/level2_{depth}"
+        endpoint = f"/api/v1/market/orderbook/level2_{depth}"
         async with self.session.get(f"{self.base_url}{endpoint}", params={"symbol": symbol}) as response:
             response.raise_for_status()
             payload = await response.json()
