@@ -68,6 +68,10 @@ def from_raw(amount: int, decimals: int) -> Decimal:
     return Decimal(amount) / (Decimal(10) ** decimals)
 
 
+class PendingTransactionError(RuntimeError):
+    """A transaction was broadcast but its final receipt could not be confirmed."""
+
+
 class PlunderSwapV3:
     """Direct interaction with the configured V3 pool and router only."""
 
@@ -181,7 +185,13 @@ class PlunderSwapV3:
         txn = self.build_swap_transaction(direction, amount_in, amount_out)
         signed = self.w3.eth.account.sign_transaction(txn, self.settings.wallet_private_key)
         tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
-        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
+        try:
+            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
+        except Exception as exc:
+            raise PendingTransactionError(
+                f"Transaction was broadcast but receipt is unconfirmed: {tx_hash.hex()}. "
+                "Stop and reconcile this hash before restarting."
+            ) from exc
         if receipt.status != 1:
             raise RuntimeError(f"PlunderSwap V3 transaction reverted: {tx_hash.hex()}")
         return tx_hash.hex()
