@@ -11,7 +11,7 @@ load_dotenv()
 
 from market_scanner import (
     CAPITAL_SIZES_USDT, discover_dexscreener_pairs, load_registry,
-    quote_capital_grid, serialise, verify_market, verify_network_connectivity, write_reports,
+    quote_capital_grid, serialise, verify_market, verify_network_connectivity, verify_v3_deployments,\n    discover_and_validate_v3_candidates, write_reports,
 )
 from scan_engine import scan_registry
 
@@ -28,7 +28,7 @@ async def run() -> None:
     parser.add_argument("--validate",metavar="MARKET_ID",help="Validate configured V3 factory, pool and QuoterV2 on-chain")
     parser.add_argument("--token0-usd-price",default=None,help="Independently sourced USD price for market token0")
     parser.add_argument("--token1-usd-price",default=None,help="Independently sourced USD price for market token1")
-    parser.add_argument("--check-networks",action="store_true",help="Check configured RPC connectivity and chain IDs")
+    parser.add_argument("--check-networks",action="store_true",help="Check configured RPC connectivity and chain IDs")\n    parser.add_argument("--check-v3-deployments",action="store_true",help="Read-only verify configured V3 Factory, QuoterV2 bytecode and fee tiers")\n    parser.add_argument("--discover-v3",metavar="QUERY",help="Discover DexScreener pairs then verify V3 Factory pools and bidirectional QuoterV2 probes")
     parser.add_argument("--scan",action="store_true",help="Run enabled, verified V3 markets through quotes and arbitrage evaluation")
     parser.add_argument("--output-dir",default="reports")
     args=parser.parse_args()
