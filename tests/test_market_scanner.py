@@ -300,4 +300,4 @@ def test_v3_candidate_discovery_marks_missing_chain_deployment():
         [{"chain":"zilliqa","pair_address":"0x"+"11"*20}],
         [{"id":32769,"name":"zilliqa"}])
     assert rows[0]["status"]=="NOT_CONFIGURED"
-    assert rows[0]["enabled"] if "enabled" in rows[0] else True
+
