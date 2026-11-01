@@ -320,13 +320,51 @@ def rank_opportunities(rows: list[dict[str, Any]], weights: dict[str, Any]) -> l
     return sorted(output, key=lambda item: (item.capital_usdt, item.rank))
 
 
+def simulate_sell_base_into_bids(base_amount: Decimal, bids: Iterable[tuple[Decimal, Decimal]]) -> Decimal:
+    """Return quote proceeds for a market sell, consuming bid depth from best to worst."""
+    remaining, proceeds = base_amount, Decimal(0)
+    if base_amount <= 0:
+        raise ValueError("Base amount must be positive")
+    for price, size in sorted(bids, key=lambda level: level[0], reverse=True):
+        take = min(remaining, size)
+        if price <= 0 or size < 0:
+            raise ValueError("Invalid bid level")
+        proceeds += take * price
+        remaining -= take
+        if remaining <= 0:
+            return proceeds
+    raise ValueError("Insufficient CEX bid depth for requested base amount")
+
+
+def simulate_buy_base_with_quote(quote_budget: Decimal,
+                                 asks: Iterable[tuple[Decimal, Decimal]]) -> Decimal:
+    """Return base acquired with a quote budget, consuming ask depth from best to worst."""
+    remaining, acquired = quote_budget, Decimal(0)
+    if quote_budget <= 0:
+        raise ValueError("Quote budget must be positive")
+    for price, size in sorted(asks, key=lambda level: level[0]):
+        if price <= 0 or size < 0:
+            raise ValueError("Invalid ask level")
+        level_cost = price * size
+        spend = min(remaining, level_cost)
+        acquired += spend / price
+        remaining -= spend
+        if remaining <= 0:
+            return acquired
+    if remaining > Decimal("0.000000000000000001"):
+        raise ValueError("Insufficient CEX ask depth for requested quote budget")
+    return acquired
+
+
 def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
                      quote_to_base: Callable[[Decimal], Decimal],
                      base_to_quote: Callable[[Decimal], Decimal],
                      cex_bid: Decimal, cex_ask: Decimal, cex_fee_rate: Decimal,
                      quote_asset_usd_price: Decimal, gas_cost_usdt: Decimal | None,
                      status: str, asset_mapping_verified: bool, capacity_search_max_usdt: Decimal | None = None,
-                     usd_prices_verified: bool = False, cex_depth_verified: bool = False) -> list[dict[str, Any]]:
+                     usd_prices_verified: bool = False, cex_depth_verified: bool = False,
+                     cex_sell_base: Callable[[Decimal], Decimal] | None = None,
+                     cex_buy_base_with_quote: Callable[[Decimal], Decimal] | None = None) -> list[dict[str, Any]]:
     if status != "VERIFIED" or not asset_mapping_verified:
         return [{"route":"DEX_CEX","market_a":market_id,"status":"UNVERIFIED",
                  "reason":"V3 market or CEX asset mapping is not verified"}]
@@ -334,9 +372,10 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
         raise ValueError("Invalid CEX prices or quote asset conversion")
     if not 0 <= cex_fee_rate < 1:
         raise ValueError("Invalid CEX fee rate")
-    if not usd_prices_verified or not cex_depth_verified:
+    if (not usd_prices_verified or not cex_depth_verified
+            or cex_sell_base is None or cex_buy_base_with_quote is None):
         return [{"route":"DEX_CEX","market_a":market_id,"status":"INSUFFICIENT_DATA",
-                 "reason":"Verified USD conversion and CEX order-book depth are required"}]
+                 "reason":"Verified USD conversion and executable CEX order-book depth callbacks are required"}]
     capital_sizes = tuple(capital_sizes_usdt)
     rows = []
     for capital in capital_sizes:
@@ -345,7 +384,7 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
         base_out = quote_to_base(quote_in)
         gross_a = base_out * cex_bid * (1-cex_fee_rate) * quote_asset_usd_price - capital
         # Buy base on CEX, sell base into V3.
-        base_bought = quote_in / (cex_ask * (1+cex_fee_rate))
+        base_bought = cex_buy_base_with_quote(quote_in / (1+cex_fee_rate))
         quote_out = base_to_quote(base_bought)
         gross_b = quote_out * quote_asset_usd_price - capital
         for route, gross in (("DEX_CEX", gross_a), ("CEX_DEX", gross_b)):
@@ -353,8 +392,8 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
             def gross_at(size: Decimal, selected_route: str = route) -> Decimal:
                 qin = size / quote_asset_usd_price
                 if selected_route == "DEX_CEX":
-                    return quote_to_base(qin) * cex_bid * (1-cex_fee_rate) * quote_asset_usd_price - size
-                bought = qin / (cex_ask * (1+cex_fee_rate))
+                    return cex_sell_base(quote_to_base(qin)) * (1-cex_fee_rate) * quote_asset_usd_price - size
+                bought = cex_buy_base_with_quote(qin / (1+cex_fee_rate))
                 return base_to_quote(bought) * quote_asset_usd_price - size
             capacity = (calculate_quote_capacity(gross_at, minimum_input=min(capital_sizes),
                          maximum_input=capacity_search_max_usdt, gas_cost=gas_cost_usdt)
