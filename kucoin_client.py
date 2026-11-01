@@ -118,6 +118,9 @@ class KuCoinClient:
 
         if not details:
             raise RuntimeError(f"KuCoin order status unavailable: {order_id}")
+        if details.get("isActive") is True:
+            await self._private_request("DELETE", f"/api/v1/orders/{order_id}")
+            details = await self._private_request("GET", f"/api/v1/orders/{order_id}")
         filled = Decimal(str(details.get("dealSize", "0")))
         funds = Decimal(str(details.get("dealFunds", "0")))
         if filled <= 0:
