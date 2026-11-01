@@ -364,7 +364,8 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
                      status: str, asset_mapping_verified: bool, capacity_search_max_usdt: Decimal | None = None,
                      usd_prices_verified: bool = False, cex_depth_verified: bool = False,
                      cex_sell_base: Callable[[Decimal], Decimal] | None = None,
-                     cex_buy_base_with_quote: Callable[[Decimal], Decimal] | None = None) -> list[dict[str, Any]]:
+                     cex_buy_base_with_quote: Callable[[Decimal], Decimal] | None = None,
+                     slippage_bps: int | None = None) -> list[dict[str, Any]]:
     if status != "VERIFIED" or not asset_mapping_verified:
         return [{"route":"DEX_CEX","market_a":market_id,"status":"UNVERIFIED",
                  "reason":"V3 market or CEX asset mapping is not verified"}]
@@ -373,7 +374,8 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
     if not 0 <= cex_fee_rate < 1:
         raise ValueError("Invalid CEX fee rate")
     if (not usd_prices_verified or not cex_depth_verified
-            or cex_sell_base is None or cex_buy_base_with_quote is None):
+            or cex_sell_base is None or cex_buy_base_with_quote is None
+            or slippage_bps is None or not 0 <= slippage_bps < 10_000):
         return [{"route":"DEX_CEX","market_a":market_id,"status":"INSUFFICIENT_DATA",
                  "reason":"Verified USD conversion and executable CEX order-book depth callbacks are required"}]
     capital_sizes = tuple(capital_sizes_usdt)
@@ -381,20 +383,21 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
     for capital in capital_sizes:
         quote_in = capital / quote_asset_usd_price
         # Buy base on V3, sell base on CEX.
-        base_out = quote_to_base(quote_in)
+        base_out = quote_to_base(quote_in) * (Decimal(1)-Decimal(slippage_bps)/Decimal(10_000))
         gross_a = cex_sell_base(base_out) * (1-cex_fee_rate) * quote_asset_usd_price - capital
         # Buy base on CEX, sell base into V3.
         base_bought = cex_buy_base_with_quote(quote_in / (1+cex_fee_rate))
-        quote_out = base_to_quote(base_bought)
+        quote_out = base_to_quote(base_bought) * (Decimal(1)-Decimal(slippage_bps)/Decimal(10_000))
         gross_b = quote_out * quote_asset_usd_price - capital
         for route, gross in (("DEX_CEX", gross_a), ("CEX_DEX", gross_b)):
             net = gross - gas_cost_usdt if gas_cost_usdt is not None else None
             def gross_at(size: Decimal, selected_route: str = route) -> Decimal:
                 qin = size / quote_asset_usd_price
                 if selected_route == "DEX_CEX":
-                    return cex_sell_base(quote_to_base(qin)) * (1-cex_fee_rate) * quote_asset_usd_price - size
+                    base_amount = quote_to_base(qin) * (Decimal(1)-Decimal(slippage_bps)/Decimal(10_000))
+                    return cex_sell_base(base_amount) * (1-cex_fee_rate) * quote_asset_usd_price - size
                 bought = cex_buy_base_with_quote(qin / (1+cex_fee_rate))
-                return base_to_quote(bought) * quote_asset_usd_price - size
+                return base_to_quote(bought) * (Decimal(1)-Decimal(slippage_bps)/Decimal(10_000)) * quote_asset_usd_price - size
             capacity = (calculate_quote_capacity(gross_at, minimum_input=min(capital_sizes),
                          maximum_input=capacity_search_max_usdt, gas_cost=gas_cost_usdt)
                          if gas_cost_usdt is not None and capacity_search_max_usdt is not None else None)
@@ -416,7 +419,7 @@ def evaluate_dex_dex(*, market_a: dict[str, Any], market_b: dict[str, Any],
                      b_base_to_quote: Callable[[Decimal], Decimal],
                      quote_asset_usd_price: Decimal,
                      gas_cost_a_usdt: Decimal | None, gas_cost_b_usdt: Decimal | None, capacity_search_max_usdt: Decimal | None = None,
-                     usd_prices_verified: bool = False) -> list[dict[str, Any]]:
+                     usd_prices_verified: bool = False, slippage_bps: int | None = None) -> list[dict[str, Any]]:
     if (market_a.get("status") != "VERIFIED" or market_b.get("status") != "VERIFIED"
             or market_a.get("enabled") is not True or market_b.get("enabled") is not True):
         return [{"route":"DEX_DEX","market_a":market_a["id"],"market_b":market_b["id"],
@@ -429,9 +432,9 @@ def evaluate_dex_dex(*, market_a: dict[str, Any], market_b: dict[str, Any],
     if not compatible:
         return [{"route":"DEX_DEX","market_a":market_a["id"],"market_b":market_b["id"],
                  "status":"REJECTED","reason":"Markets are not same-chain and exact-token compatible"}]
-    if not usd_prices_verified:
+    if not usd_prices_verified or slippage_bps is None or not 0 <= slippage_bps < 10_000:
         return [{"route":"DEX_DEX","market_a":market_a["id"],"market_b":market_b["id"],
-                 "status":"INSUFFICIENT_DATA","reason":"Verified USD conversion for the common quote token is required"}]
+                 "status":"INSUFFICIENT_DATA","reason":"Verified USD conversion and explicit slippage bound are required"}]
     gas = gas_cost_a_usdt + gas_cost_b_usdt if gas_cost_a_usdt is not None and gas_cost_b_usdt is not None else None
     capital_sizes = tuple(capital_sizes_usdt)
     rows = []
@@ -441,13 +444,15 @@ def evaluate_dex_dex(*, market_a: dict[str, Any], market_b: dict[str, Any],
             (market_a, market_b, a_quote_to_base, b_base_to_quote),
             (market_b, market_a, b_quote_to_base, a_base_to_quote),
         ):
-            quote_out = second(first(quote_in))
+            after_first = first(quote_in) * (Decimal(1)-Decimal(slippage_bps)/Decimal(10_000))
+            quote_out = second(after_first) * (Decimal(1)-Decimal(slippage_bps)/Decimal(10_000))
             gross = (quote_out-quote_in)*quote_asset_usd_price
             net = gross-gas if gas is not None else None
             def gross_at(size: Decimal, first_quote: Callable[[Decimal], Decimal] = first,
                          second_quote: Callable[[Decimal], Decimal] = second) -> Decimal:
                 q = size / quote_asset_usd_price
-                return (second_quote(first_quote(q))-q)*quote_asset_usd_price
+                after_first_quote = first_quote(q) * (Decimal(1)-Decimal(slippage_bps)/Decimal(10_000))
+                return (second_quote(after_first_quote) * (Decimal(1)-Decimal(slippage_bps)/Decimal(10_000))-q)*quote_asset_usd_price
             capacity = (calculate_quote_capacity(gross_at,minimum_input=min(capital_sizes),
                          maximum_input=capacity_search_max_usdt,gas_cost=gas)
                          if gas is not None and capacity_search_max_usdt is not None else None)
