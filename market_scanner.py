@@ -669,3 +669,129 @@ def verify_market(market: dict[str, Any], chain: dict[str, Any]) -> tuple[V3Pool
     probe_amount = _decimal(market.get("probe_amount","0.000001"))
     quoter.validate_deployment(snapshot,probe_token,probe_amount)
     return snapshot,quoter
+
+
+def verify_v3_deployments(chains: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Read-only deployment smoke test; does not claim that any pool or market exists."""
+    reports: list[dict[str, Any]] = []
+    for chain in chains:
+        deployment = chain.get("v3_deployments") or {}
+        if not deployment:
+            reports.append({"chain":chain["name"],"chain_id":int(chain["id"]),
+                            "status":"NOT_CONFIGURED",
+                            "reason":"No official Uniswap V3 deployment configured for this chain"})
+            continue
+        try:
+            rpc = rpc_for_chain(chain)
+            w3 = Web3(Web3.HTTPProvider(rpc, request_kwargs={"timeout":20}))
+            if not w3.is_connected():
+                raise ConnectionError("RPC connectivity failed")
+            actual_chain_id = int(w3.eth.chain_id)
+            if actual_chain_id != int(chain["id"]):
+                raise ValueError(f"Chain ID mismatch: expected {chain['id']}, got {actual_chain_id}")
+            factory_address = _address(deployment["factory"])
+            quoter_address = _address(deployment["quoter_v2"])
+            if not w3.eth.get_code(factory_address):
+                raise ValueError("Configured UniswapV3Factory has no deployed bytecode")
+            if not w3.eth.get_code(quoter_address):
+                raise ValueError("Configured QuoterV2 has no deployed bytecode")
+            factory = w3.eth.contract(address=factory_address, abi=FACTORY_ABI)
+            fee_tiers = {}
+            for fee in deployment.get("fee_tiers", [100,500,3000,10000]):
+                spacing = int(factory.functions.feeAmountTickSpacing(int(fee)).call())
+                fee_tiers[str(fee)] = spacing
+            active = {fee:spacing for fee,spacing in fee_tiers.items() if spacing > 0}
+            if not active:
+                raise ValueError("Factory reports no enabled configured V3 fee tiers")
+            block = w3.eth.get_block("latest")
+            reports.append({"chain":chain["name"],"chain_id":actual_chain_id,
+                "factory":factory_address,"quoter_v2":quoter_address,
+                "factory_bytecode":"PRESENT","quoter_bytecode":"PRESENT",
+                "fee_tier_tick_spacing":fee_tiers,"active_fee_tiers":active,
+                "block_number":int(block["number"]),"status":"V3_DEPLOYMENT_VERIFIED",
+                "market_status":"NOT_CHECKED",
+                "note":"Factory and Quoter deployments/fee tiers verified; no token pair or live pool is implied."})
+        except Exception as exc:
+            reports.append({"chain":chain["name"],"chain_id":int(chain["id"]),
+                "status":"UNVERIFIED","reason":f"{type(exc).__name__}: {exc}"})
+    return reports
+
+
+def discover_and_validate_v3_candidates(candidates: Iterable[dict[str, Any]],
+                                        chains: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Turn DexScreener candidates into verified V3 pool candidates using chain RPCs."""
+    chain_map = {str(row["name"]).lower():row for row in chains}
+    output: list[dict[str, Any]] = []
+    seen: set[tuple[int,str]] = set()
+    for candidate in candidates:
+        chain = chain_map.get(str(candidate.get("chain") or "").lower())
+        if chain is None:
+            continue
+        deployment = chain.get("v3_deployments") or {}
+        if not deployment:
+            output.append({"chain":chain["name"],"pair_address":candidate.get("pair_address"),
+                "status":"NOT_CONFIGURED","reason":"No Uniswap V3 deployment configured; use the chain's own verified V3 DEX registry."})
+            continue
+        try:
+            rpc = rpc_for_chain(chain)
+            w3 = Web3(Web3.HTTPProvider(rpc,request_kwargs={"timeout":20}))
+            if not w3.is_connected():
+                raise ConnectionError("RPC connectivity failed")
+            if int(w3.eth.chain_id) != int(chain["id"]):
+                raise ValueError("RPC chain ID mismatch")
+            token_a = _address(str((candidate.get("base_token") or {}).get("address") or ""))
+            token_b = _address(str((candidate.get("quote_token") or {}).get("address") or ""))
+            if token_a.lower() == token_b.lower():
+                raise ValueError("DexScreener candidate contains identical token addresses")
+            factory_address = _address(deployment["factory"])
+            quoter_address = _address(deployment["quoter_v2"])
+            factory = w3.eth.contract(address=factory_address,abi=FACTORY_ABI)
+            matched = False
+            for fee in deployment.get("fee_tiers",[100,500,3000,10000]):
+                pool_address = _address(factory.functions.getPool(token_a,token_b,int(fee)).call())
+                if int(pool_address,16) == 0:
+                    continue
+                key = (int(chain["id"]),pool_address.lower())
+                if key in seen:
+                    continue
+                snapshot = V3PoolValidator(w3).validate(expected_chain_id=int(chain["id"]),
+                    factory_address=factory_address,pool_address=pool_address,
+                    token_a=token_a,token_b=token_b,fee=int(fee))
+                quoter = V3QuoterV2(w3,quoter_address)
+                token0_contract = w3.eth.contract(address=snapshot.token0,abi=ERC20_ABI)
+                token1_contract = w3.eth.contract(address=snapshot.token1,abi=ERC20_ABI)
+                symbol0 = str(token0_contract.functions.symbol().call())
+                symbol1 = str(token1_contract.functions.symbol().call())
+                probe0 = Decimal("0.001") if snapshot.token0_decimals >= 3 else Decimal(1)
+                probe1 = Decimal("0.001") if snapshot.token1_decimals >= 3 else Decimal(1)
+                quote0 = quoter.quote(snapshot,snapshot.token0,probe0)
+                quote1 = quoter.quote(snapshot,snapshot.token1,probe1)
+                seen.add(key)
+                output.append({
+                    "market_id":f"uniswap_v3_{chain['name']}_{pool_address.lower()}",
+                    "chain":chain["name"],"chain_id":int(chain["id"]),
+                    "dex":"uniswap","version":"V3","factory":factory_address,
+                    "pool":pool_address,"quoter":quoter_address,
+                    "fee":snapshot.fee,"tick_spacing":snapshot.tick_spacing,
+                    "token0":{"symbol":symbol0,"address":snapshot.token0,"decimals":snapshot.token0_decimals},
+                    "token1":{"symbol":symbol1,"address":snapshot.token1,"decimals":snapshot.token1_decimals},
+                    "liquidity_raw":str(snapshot.liquidity),"tick":snapshot.tick,
+                    "sqrt_price_x96":str(snapshot.sqrt_price_x96),
+                    "block_number":snapshot.block_number,"timestamp_utc":snapshot.timestamp_utc,
+                    "probe_quotes":[serialise(quote0),serialise(quote1)],
+                    "dexscreener_pair_address":candidate.get("pair_address"),
+                    "dexscreener_liquidity_usd":candidate.get("liquidity_usd"),
+                    "dexscreener_volume_24h_usd":candidate.get("volume_24h_usd"),
+                    "enabled":False,"rankable":False,"status":"V3_POOL_AND_QUOTER_VERIFIED",
+                    "reason":"On-chain pool and bidirectional QuoterV2 probes verified. Economic inputs, CEX mapping, gas USD and capacity are not configured; candidate is not rankable."
+                })
+                matched = True
+            if not matched:
+                output.append({"chain":chain["name"],"chain_id":int(chain["id"]),
+                    "pair_address":candidate.get("pair_address"),"status":"NO_MATCHING_V3_POOL",
+                    "reason":"Factory.getPool returned no pool for the candidate pair across configured fee tiers."})
+        except Exception as exc:
+            output.append({"chain":chain["name"],"chain_id":int(chain["id"]),
+                "pair_address":candidate.get("pair_address"),"status":"UNVERIFIED",
+                "reason":f"{type(exc).__name__}: {exc}"})
+    return output
