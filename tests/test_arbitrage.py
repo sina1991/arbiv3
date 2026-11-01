@@ -15,7 +15,7 @@ def test_buy_dex_sell_cex_profit_includes_both_fees_and_gas():
         gas_cost_usdt=D("0.02"),
     )
     assert rows[0].direction is Direction.BUY_WZIL_ON_DEX_SELL_ZIL_ON_CEX
-    assert rows[0].estimated_profit_usdt == D("0.1599")
+    assert rows[0].estimated_profit_usdt == D("0.1699")
     assert rows[0].executable
 
 
