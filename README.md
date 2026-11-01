@@ -5,10 +5,10 @@ arbiV3 is a **Uniswap V3 / V3-compatible concentrated-liquidity** arbitrage scan
 ## Safety and operating mode
 
 - Read-only: no transaction signing, broadcasting, approvals or exchange orders.
-- KuCoin integration is public market data only.
+- KuCoin integration is public market data only, including aggregated Level-2 depth for size-aware fills.
 - Never enable a market without validating its chain, factory, pool, token metadata, fee, QuoterV2 ABI/deployment and successful quotes.
 - DexScreener is discovery-only. Candidate pairs remain `UNVERIFIED` until checked on-chain.
-- Unknown gas, token USD price, CEX asset mapping or liquidity capacity means no net profit and no ranking.
+- Unknown gas, token USD price, CEX asset mapping, Level-2 depth, execution slippage bound or liquidity capacity means no net profit and no ranking.
 - Cross-chain opportunities are excluded unless a separately validated bridge/inventory model is added.
 
 ## Networks
