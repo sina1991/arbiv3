@@ -79,6 +79,10 @@ async def scan_registry(registry: dict[str, Any], chains: dict[int, dict[str, An
                 opportunity_rows.append({"route":"DEX_CEX","market_a":market["id"],
                     "status":"INSUFFICIENT_DATA","reason":"CEX mapping must include exact base and quote token contract addresses"})
                 continue
+            if cex.get("fee_rate") is None or cex.get("fee_rate_verified") is not True:
+                opportunity_rows.append({"route":"DEX_CEX","market_a":market["id"],
+                    "status":"INSUFFICIENT_DATA","reason":"Verified CEX trading fee rate is required"})
+                continue
             try:
                 bid, ask = await kucoin.ticker(cex["symbol"])
                 bids, asks = await kucoin.order_book(cex["symbol"],100)
@@ -95,7 +99,7 @@ async def scan_registry(registry: dict[str, Any], chains: dict[int, dict[str, An
                     market_id=market["id"],capital_sizes_usdt=CAPITAL_SIZES_USDT,
                     quote_to_base=quote_to_base,base_to_quote=base_to_quote,
                     cex_bid=bid,cex_ask=ask,
-                    cex_fee_rate=Decimal(str(cex.get("fee_rate",registry.get("kucoin_fee_rate","0.001")))),
+                    cex_fee_rate=Decimal(str(cex["fee_rate"])),
                     quote_asset_usd_price=quote_usd,gas_cost_usdt=gas_cost,
                     status="VERIFIED",asset_mapping_verified=bool(cex.get("asset_mapping_verified")),
                     usd_prices_verified=bool(market.get("usd_prices_verified")),
