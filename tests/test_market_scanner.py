@@ -7,6 +7,7 @@ from market_scanner import (
     CAPITAL_SIZES_USDT, V3PoolValidator, calculate_quote_capacity,
     evaluate_dex_cex, evaluate_dex_dex, from_raw, load_registry,
     rank_opportunities, to_raw, estimate_gas_cost_usdt,
+    simulate_sell_base_into_bids, simulate_buy_base_with_quote,
 )
 
 
@@ -42,7 +43,9 @@ def test_unknown_gas_never_produces_net_or_rankable_opportunity():
         base_to_quote=lambda amount:amount*D("10.2"),
         cex_bid=D("10.2"),cex_ask=D("10.3"),cex_fee_rate=D(".001"),
         quote_asset_usd_price=D("1"),gas_cost_usdt=None,
-        status="VERIFIED",asset_mapping_verified=True,usd_prices_verified=True,cex_depth_verified=True)
+        status="VERIFIED",asset_mapping_verified=True,usd_prices_verified=True,cex_depth_verified=True,
+        cex_sell_base=lambda base:base*D("10.2"),
+        cex_buy_base_with_quote=lambda quote:quote/D("10.3"))
     assert len(rows)==2
     assert all(row["net_profit_usdt"] is None for row in rows)
     assert all(row["status"]=="INSUFFICIENT_DATA" for row in rows)
@@ -195,3 +198,12 @@ def test_dex_cex_requires_verified_orderbook_depth_and_usd_prices():
         quote_asset_usd_price=D("1"),gas_cost_usdt=D("0"),
         status="VERIFIED",asset_mapping_verified=True)
     assert rows[0]["status"]=="INSUFFICIENT_DATA"
+
+
+def test_cex_orderbook_depth_simulation_consumes_multiple_levels():
+    bids=[(D("10"),D("2")),(D("9"),D("3"))]
+    asks=[(D("10"),D("2")),(D("11"),D("3"))]
+    assert simulate_sell_base_into_bids(D("3"),bids)==D("28")
+    assert simulate_buy_base_with_quote(D("25"),asks)==D("2.5")
+    with pytest.raises(ValueError,match="Insufficient"):
+        simulate_sell_base_into_bids(D("6"),bids)
