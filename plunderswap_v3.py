@@ -45,6 +45,7 @@ ROUTER_ABI = [
     },
 ]
 ERC20_ABI = [
+    {"inputs":[],"name":"decimals","outputs":[{"type":"uint8"}],"stateMutability":"view","type":"function"},
     {"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
     {"inputs":[{"name":"owner","type":"address"},{"name":"spender","type":"address"}],"name":"allowance","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
 ]
@@ -96,6 +97,16 @@ class PlunderSwapV3:
         self._validate_pool()
 
     def _validate_pool(self) -> None:
+        if not self.w3.eth.get_code(self.router_address):
+            raise ValueError("Configured PlunderSwap router has no contract code")
+        if not self.w3.eth.get_code(self.pool.address):
+            raise ValueError("Configured PlunderSwap V3 pool has no contract code")
+        wzil_decimals = int(self.wzil.functions.decimals().call())
+        zusdt_decimals = int(self.zusdt.functions.decimals().call())
+        if wzil_decimals != self.settings.wzil_decimals:
+            raise ValueError(f"WZIL decimals mismatch: configured {self.settings.wzil_decimals}, on-chain {wzil_decimals}")
+        if zusdt_decimals != self.settings.zusdt_decimals:
+            raise ValueError(f"zUSDT decimals mismatch: configured {self.settings.zusdt_decimals}, on-chain {zusdt_decimals}")
         token0 = self.pool.functions.token0().call()
         token1 = self.pool.functions.token1().call()
         actual = {token0.lower(), token1.lower()}
