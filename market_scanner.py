@@ -194,9 +194,10 @@ class V3QuoterV2:
                     * (Decimal(10) ** (decimals_in - decimals_out)))
         else:
             raise ValueError("token_in is not part of this V3 pool")
-        raw_in = to_raw(amount_in, decimals_in)
+        raw_in = int(amount_in * (Decimal(10) ** decimals_in))
         if raw_in <= 0:
             raise ValueError("Quote amount rounds to zero")
+        amount_in = from_raw(raw_in, decimals_in)
         params = (token_in, token_out, raw_in, snapshot.fee, 0)
         result = self.contract.functions.quoteExactInputSingle(params).call()
         raw_out, sqrt_after, ticks_crossed, gas_estimate = map(int, result)
@@ -467,6 +468,7 @@ def quote_capital_grid(snapshot: V3PoolSnapshot, quoter: V3QuoterV2, *,
                          "initialized_ticks_crossed":quote.initialized_ticks_crossed,
                          "gas_estimate":quote.gas_estimate,"fee_units":quote.fee_units,
                          "tick_before":quote.tick_before,"sqrt_price_x96_after":quote.sqrt_price_x96_after,
+                         "pool_liquidity":snapshot.liquidity,"pool_snapshot_block":snapshot.block_number,
                          "block_number":quote.block_number,"timestamp_utc":quote.timestamp_utc,
                          "status":"VERIFIED"})
     return rows
@@ -482,12 +484,16 @@ async def discover_dexscreener_pairs(query: str, allowed_chain_names: set[str],
             response.raise_for_status()
             payload = await response.json()
     results = []
+    seen_pools: set[tuple[str,str]] = set()
     for pair in payload.get("pairs") or []:
         liquidity = _decimal((pair.get("liquidity") or {}).get("usd") or 0)
         volume = _decimal((pair.get("volume") or {}).get("h24") or 0)
         chain = str(pair.get("chainId") or "").lower()
-        if chain not in allowed_chain_names or liquidity < minimum_liquidity_usd or volume < minimum_volume_24h_usd:
+        pair_address = str(pair.get("pairAddress") or "").lower()
+        duplicate_key = (chain,pair_address)
+        if chain not in allowed_chain_names or not pair_address or duplicate_key in seen_pools or liquidity < minimum_liquidity_usd or volume < minimum_volume_24h_usd:
             continue
+        seen_pools.add(duplicate_key)
         results.append({"chain":chain,"dex":pair.get("dexId"),"pair_address":pair.get("pairAddress"),
                         "base_token":pair.get("baseToken"),"quote_token":pair.get("quoteToken"),
                         "price_usd":pair.get("priceUsd"),"liquidity_usd":str(liquidity),
