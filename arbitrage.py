@@ -40,7 +40,7 @@ def evaluate_opportunities(
             opportunities.append(Opportunity(
                 Direction.BUY_ZIL_ON_CEX_SELL_WZIL_ON_DEX, size, Decimal("0"),
                 sell_proceeds, cex_cost, Decimal("0"), net_profit, gas_cost_usdt,
-                complete and net_profit >= minimum_profit,
+                complete and net_profit >= threshold,
                 "gas-adjusted estimate" if complete else "gas conversion unavailable; not executable"
             ))
     # Preserve the strategy's size-first policy: inspect the largest executable size first.
