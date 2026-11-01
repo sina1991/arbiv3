@@ -382,7 +382,7 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
         quote_in = capital / quote_asset_usd_price
         # Buy base on V3, sell base on CEX.
         base_out = quote_to_base(quote_in)
-        gross_a = base_out * cex_bid * (1-cex_fee_rate) * quote_asset_usd_price - capital
+        gross_a = cex_sell_base(base_out) * (1-cex_fee_rate) * quote_asset_usd_price - capital
         # Buy base on CEX, sell base into V3.
         base_bought = cex_buy_base_with_quote(quote_in / (1+cex_fee_rate))
         quote_out = base_to_quote(base_bought)
@@ -467,9 +467,14 @@ def calculate_quote_capacity(quote_profit: Callable[[Decimal], Decimal], *,
     # unprofitable while larger sizes become profitable. Find the last
     # profitable interval using real quote callbacks, then refine its boundary.
     samples = 256
+    def net_at(amount: Decimal) -> Decimal:
+        try:
+            return quote_profit(amount)-gas_cost
+        except Exception:
+            return Decimal("-Infinity")
     grid = [minimum_input + (maximum_input-minimum_input)*Decimal(i)/Decimal(samples)
             for i in range(samples+1)]
-    profitable = [i for i, amount in enumerate(grid) if quote_profit(amount)-gas_cost > 0]
+    profitable = [i for i, amount in enumerate(grid) if net_at(amount) > 0]
     if not profitable:
         return Decimal(0)
     index = profitable[-1]
@@ -480,7 +485,7 @@ def calculate_quote_capacity(quote_profit: Callable[[Decimal], Decimal], *,
         if high-low <= tolerance:
             break
         mid = (low+high)/2
-        if quote_profit(mid)-gas_cost > 0:
+        if net_at(mid) > 0:
             low = mid
         else:
             high = mid
