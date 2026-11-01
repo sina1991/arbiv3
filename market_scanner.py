@@ -605,6 +605,11 @@ def verify_network_connectivity(chains: Iterable[dict[str, Any]]) -> list[dict[s
 
 
 def verify_market(market: dict[str, Any], chain: dict[str, Any]) -> tuple[V3PoolSnapshot,V3QuoterV2]:
+    for key in ("factory","pool","quoter"):
+        if not market.get(key):
+            raise ValueError(f"Missing required V3 deployment address: {key}")
+    if market.get("version") != "V3" or market.get("quote_adapter") != "v3_quoter_v2":
+        raise ValueError("Only V3 QuoterV2 markets can be validated")
     rpc = os.getenv(chain["rpc_env"],"").strip()
     if not rpc:
         raise RuntimeError(f"RPC not configured: {chain['rpc_env']}")
