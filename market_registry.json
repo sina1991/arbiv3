@@ -89,10 +89,10 @@
       "chain": "zilliqa",
       "dex": "plunderswap",
       "version": "V3",
-      "factory": null,
+      "factory": "0x000A3ED861B2cC98Cc5f1C0Eb4d1B53904c0c93a",
       "pool": "0xD9969Fac78afC7C696443802C0b8cFf1b1B45Fc8",
       "router": "0xe30161F32A019d876F082d9FF13ed451a03A2086",
-      "quoter": null,
+      "quoter": "0xAE4474364B8fc6Ce0fe8F888752540C05948AD94",
       "token0": {
         "symbol": "zUSDT",
         "address": "0x2274005778063684fbB1BfA96a2b725dc37d75f9",
@@ -116,9 +116,10 @@
       "estimated_round_trip_gas_usdt": null,
       "enabled": false,
       "status": "UNVERIFIED",
-      "disabled_reason": "Reference-only. Factory, QuoterV2, pool-to-factory mapping, on-chain fee/state, quote behavior and WZIL/ZIL mapping are not independently verified.",
+      "disabled_reason": "Official factory and QuoterV2 addresses are documented, but current RPC connectivity, factory-to-pool mapping, pool state, ABI probe quotes and WZIL/ZIL mapping have not yet been independently validated on-chain.",
       "probe_token": "0x2274005778063684fbB1BfA96a2b725dc37d75f9",
-      "probe_amount": "0.01"
+      "probe_amount": "0.01",
+      "deployment_source": "https://docs.plunderswap.com/developers/"
     }
   ]
 }
