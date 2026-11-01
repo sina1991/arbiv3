@@ -378,8 +378,9 @@ def evaluate_dex_dex(*, market_a: dict[str, Any], market_b: dict[str, Any],
         return [{"route":"DEX_DEX","market_a":market_a["id"],"market_b":market_b["id"],
                  "status":"REJECTED","reason":"Markets are not same-chain and exact-token compatible"}]
     gas = gas_cost_a_usdt + gas_cost_b_usdt if gas_cost_a_usdt is not None and gas_cost_b_usdt is not None else None
+    capital_sizes = tuple(capital_sizes_usdt)
     rows = []
-    for capital in capital_sizes_usdt:
+    for capital in capital_sizes:
         quote_in = capital / quote_asset_usd_price
         for source, destination, first, second in (
             (market_a, market_b, a_quote_to_base, b_base_to_quote),
@@ -433,6 +434,16 @@ def calculate_quote_capacity(quote_profit: Callable[[Decimal], Decimal], *,
         else:
             high = mid
     return low
+
+
+
+def estimate_gas_cost_usdt(gas_units: int, gas_price_wei: int,
+                           native_token_usd_price: Decimal) -> Decimal:
+    """Convert an explicit gas estimate and current gas price to USD; never defaults to zero."""
+    if gas_units <= 0 or gas_price_wei <= 0 or native_token_usd_price <= 0:
+        raise ValueError("Gas units, gas price and native token USD price must be positive")
+    return (Decimal(gas_units) * Decimal(gas_price_wei) / Decimal(10**18)
+            * native_token_usd_price)
 
 
 def quote_capital_grid(snapshot: V3PoolSnapshot, quoter: V3QuoterV2, *,
