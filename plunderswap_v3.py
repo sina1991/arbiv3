@@ -76,6 +76,9 @@ class PlunderSwapV3:
         self.w3 = Web3(Web3.HTTPProvider(settings.rpc_url, request_kwargs={"timeout": 15}))
         if not self.w3.is_connected():
             raise ConnectionError("Cannot connect to Zilliqa EVM RPC")
+        actual_chain_id = int(self.w3.eth.chain_id)
+        if actual_chain_id != settings.chain_id:
+            raise RuntimeError(f"Wrong chain: configured {settings.chain_id}, RPC reports {actual_chain_id}")
         self.wallet = self.w3.to_checksum_address(settings.wallet_address)
         self.router_address = self.w3.to_checksum_address(settings.router)
         self.wzil_address = self.w3.to_checksum_address(settings.wzil)
@@ -172,6 +175,9 @@ class PlunderSwapV3:
             raise RuntimeError("Transaction submission blocked outside LIVE mode")
         if not self.settings.wallet_private_key:
             raise RuntimeError("Missing wallet private key")
+        derived_address = self.w3.eth.account.from_key(self.settings.wallet_private_key).address
+        if derived_address.lower() != self.wallet.lower():
+            raise RuntimeError("WALLET_PRIVATE_KEY does not match WALLET_ADDRESS")
         txn = self.build_swap_transaction(direction, amount_in, amount_out)
         signed = self.w3.eth.account.sign_transaction(txn, self.settings.wallet_private_key)
         tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
@@ -180,10 +186,7 @@ class PlunderSwapV3:
             raise RuntimeError(f"PlunderSwap V3 transaction reverted: {tx_hash.hex()}")
         return tx_hash.hex()
 
-    def gas_cost_usdt(self) -> Decimal | None:
-        conversion = self.settings.gas_price_zil_usdt
-        if conversion is None:
-            return None
+    def gas_cost_usdt(self, zil_usdt_price: Decimal) -> Decimal:
         gas_price = Decimal(self.w3.eth.gas_price) * self.settings.gas_multiplier
         gas_zil = Decimal(self.settings.gas_limit) * gas_price / (Decimal(10) ** 18)
-        return gas_zil * conversion
+        return gas_zil * zil_usdt_price
