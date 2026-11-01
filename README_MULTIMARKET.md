@@ -1,47 +1,50 @@
-# Multi-market DRY_RUN scanner
+# V3-only market onboarding and validation
 
-This module extends arbiV3 from a single Zilliqa pair into a configuration-driven, multi-chain market research and ranking system.
+arbiV3 is intentionally a **V3 concentrated-liquidity system**. Do not add V2 adapters, constant-product math, getReserves quoting or a generic V2/V3 abstraction.
 
-## Fixed research inputs
+## Required market metadata
 
-- Capital test sizes: **100, 250, 500, 1,000, 2,500 and 5,000 USDT**.
-- Comparison routes: **DEX-CEX** and **DEX-DEX**.
-- Discovery source: DexScreener search API. Discovery results are candidates, not verified pool facts.
-- Supported chain registry: Zilliqa EVM, Ethereum, BNB Chain, Polygon, Arbitrum, Base, Optimism and Avalanche.
-- Quote adapters: UniswapV2-compatible constant-product pools and explicitly configured UniswapV3-compatible QuoterV2 contracts.
+Each enabled market must specify:
+- chain ID and RPC environment variable
+- V3 DEX identifier and protocol version
+- V3 Factory, Pool and QuoterV2 addresses
+- token addresses and independently verified decimals
+- pool fee in native uint24 V3 fee units
+- token USD price sources when USD-denominated capital sizing is required
+- CEX symbol and independently verified asset mapping for DEX-CEX
+- gas estimation inputs and liquidity-backed capacity search bound
 
-## Market onboarding
+A market is enabled only when Factory.getPool(tokenA, tokenB, fee) returns the configured pool, pool.factory matches the factory, token0/token1 and fee match, slot0/liquidity are valid, and the configured QuoterV2 successfully quotes both directions with the expected ABI.
 
-Edit `market_registry.json`. Every market must include chain ID, pool address, token addresses and decimals, DEX/version, quote adapter, fee in the adapter's native units, and (for DEX-CEX) a verified CEX symbol plus an explicit base-asset mapping.
+## Status meanings
 
-V2 fees are basis points. V3 fees are the pool's uint24 fee units (for example, 100 means 0.01%, not 100 bps). Never reuse one fee field across adapter types.
+- `VERIFIED`: all required on-chain and economic inputs for the specific operation are present and validated.
+- `UNVERIFIED`: deployment or asset facts are not independently established.
+- `REJECTED`: incompatible tokens/chains, invalid contract mapping, invalid pool state or failed validation.
+- `INSUFFICIENT_DATA`: required gas, USD conversion, quote or capacity inputs are missing.
 
-For V3, provide a QuoterV2 address only after verifying its deployment and ABI on the target chain. The scanner never uses a Router for quoting. For V2, the adapter reads pool reserves and calculates exact-input output using the configured fee.
-
-Set an RPC environment variable for each chain you enable: `ZILLIQA_RPC_URL`, `ETHEREUM_RPC_URL`, `BSC_RPC_URL`, `POLYGON_RPC_URL`, `ARBITRUM_RPC_URL`, `BASE_RPC_URL`, `OPTIMISM_RPC_URL`, or `AVALANCHE_RPC_URL`.
+A chain name in the registry is not proof of support. A successful RPC check is not proof of a V3 DEX deployment. A successful Quoter call is not proof of profitable execution.
 
 ## Discovery
 
-`discover_dexscreener_pairs` filters candidates by allowed chain, minimum USD liquidity and 24h volume. Candidate data must be validated on-chain before adding it to the active registry. In particular verify token contracts, decimals, pool token ordering, pool code, reserves/liquidity, fee, quote contract and stablecoin redemption/peg assumptions.
+DexScreener is a candidate source only. It does not establish protocol version, factory membership, fee, token decimals or quote validity. Validate every candidate on-chain before adding it as an enabled market. Deduplicate by (chain ID, pool address).
 
-## Ranking
+## Quoting
 
-Ranking is performed independently for each capital size. Only positive opportunities with a known gas estimate are rankable. The default score weights are:
+The required capital inputs are 100, 250, 500, 1,000, 2,500 and 5,000 USDT. For each size, quote both token directions using the V3 QuoterV2 belonging to that chain and DEX. Convert USD capital into token units only with independently verified USD prices. Record effective price, spot reference, price impact, fee tier, tick, initialized ticks crossed, liquidity, block number and timestamp.
 
-- 45% normalized net profit
-- 35% normalized ROI
-- 20% normalized maximum profitable capital capacity
+## Costs and capacity
 
-Gross profit, net profit, ROI, capacity and score must be reported separately. An unknown gas cost is not silently treated as zero. Quotes must be obtained at each capital size so price impact and pool depth are represented by the quote itself.
+Gas USD cost is derived from explicit gas units, current gas price and native-token USD price. Missing inputs must remain null. Capacity must be measured by actual quotes over a liquidity-backed search range; do not substitute the largest profitable test size. The capacity search is an estimate bounded by its configured search interval and should be reported with those bounds.
 
-## Current WZIL/zUSDT reference market
+## Ranking and reporting
 
-The existing PlunderSwap V3 WZIL/zUSDT pool is retained as a reference entry but disabled in the multi-market registry. Previous exact-input/exact-output observations were inconsistent, and a verified QuoterV2 deployment plus the WZIL-to-KuCoin-ZIL asset mapping are not configured. It must not be ranked until those facts are independently validated.
+Only fully verified positive-net opportunities with measured capacity are eligible. The score weights are 45% net profit, 35% ROI and 20% capital capacity. JSON and CSV reports must preserve status and rejection/insufficient-data reasons.
+
+## PlunderSwap WZIL/zUSDT
+
+The reference pool remains disabled. Factory and QuoterV2 are not configured because no independent validation has been completed. The router is reference metadata only, not a quote contract. KuCoin ZIL-USDT is not proof that WZIL is interchangeable with ZIL.
 
 ## Safety
 
-This project is a **read-only DRY_RUN market scanner**. It does not sign transactions, broadcast transactions, submit exchange orders, or request token approvals. Private keys and exchange trading credentials are not used by this scanner. Never add transaction-execution code to this project.
-
-## Current implementation boundary
-
-This commit provides the registry, discovery candidate filter, read-only V2 and QuoterV2 quote adapters, and per-capital ranking primitives. It does not claim every discovered pool is quoteable: each DEX deployment needs a validated adapter/configuration, each CEX needs a public market-data adapter, and every cross-chain route needs a separately modeled bridge/inventory cost before it can be compared as an economic opportunity.
+The scanner is read-only. It must never sign or broadcast transactions, request approvals, submit KuCoin orders or load private keys.
