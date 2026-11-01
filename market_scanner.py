@@ -417,6 +417,10 @@ def evaluate_dex_dex(*, market_a: dict[str, Any], market_b: dict[str, Any],
                      quote_asset_usd_price: Decimal,
                      gas_cost_a_usdt: Decimal | None, gas_cost_b_usdt: Decimal | None, capacity_search_max_usdt: Decimal | None = None,
                      usd_prices_verified: bool = False) -> list[dict[str, Any]]:
+    if (market_a.get("status") != "VERIFIED" or market_b.get("status") != "VERIFIED"
+            or market_a.get("enabled") is not True or market_b.get("enabled") is not True):
+        return [{"route":"DEX_DEX","market_a":market_a["id"],"market_b":market_b["id"],
+                 "status":"UNVERIFIED","reason":"Both V3 markets must be independently verified and enabled"}]
     compatible = (market_a["chain_id"] == market_b["chain_id"]
                   and market_a["token_base"]["address"].lower() == market_b["token_base"]["address"].lower()
                   and market_a["token_quote"]["address"].lower() == market_b["token_quote"]["address"].lower()
