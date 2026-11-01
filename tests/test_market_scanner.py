@@ -4,7 +4,7 @@ import pytest
 from web3 import Web3
 
 from market_scanner import (
-    CAPITAL_SIZES_USDT, V3PoolValidator, calculate_quote_capacity,
+    CAPITAL_SIZES_USDT, V3PoolValidator, V3QuoterV2, V3PoolSnapshot, calculate_quote_capacity,
     evaluate_dex_cex, evaluate_dex_dex, from_raw, load_registry,
     rank_opportunities, to_raw, estimate_gas_cost_usdt,
     simulate_sell_base_into_bids, simulate_buy_base_with_quote,
@@ -207,3 +207,21 @@ def test_cex_orderbook_depth_simulation_consumes_multiple_levels():
     assert simulate_buy_base_with_quote(D("25"),asks)==D("2")+D("5")/D("11")
     with pytest.raises(ValueError,match="Insufficient"):
         simulate_sell_base_into_bids(D("6"),bids)
+
+
+def test_quoter_v2_mock_returns_v3_quote_context():
+    quoter_address=Web3.to_checksum_address("0x"+"dd"*20)
+    token0=Web3.to_checksum_address("0x"+"11"*20)
+    token1=Web3.to_checksum_address("0x"+"22"*20)
+    contracts={quoter_address.lower():FakeContract({
+        "quoteExactInputSingle":(10**18,2**96,3,150_000)})}
+    quoter=V3QuoterV2(FakeWeb3(FakeEth(contracts)),quoter_address)
+    snapshot=V3PoolSnapshot(1,"factory","pool",token0,token1,18,6,500,10,
+                            2**96,0,10**12,True,123,"2026-01-01T00:00:00+00:00")
+    quote=quoter.quote(snapshot,token0,D("1"))
+    assert quote.amount_in==D("1")
+    assert quote.amount_out==D("1000000000000")
+    assert quote.initialized_ticks_crossed==3
+    assert quote.gas_estimate==150_000
+    assert quote.fee_units==500
+    assert quote.block_number==123
