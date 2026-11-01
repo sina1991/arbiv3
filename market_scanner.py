@@ -321,7 +321,7 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
                      base_to_quote: Callable[[Decimal], Decimal],
                      cex_bid: Decimal, cex_ask: Decimal, cex_fee_rate: Decimal,
                      quote_asset_usd_price: Decimal, gas_cost_usdt: Decimal | None,
-                     status: str, asset_mapping_verified: bool) -> list[dict[str, Any]]:
+                     status: str, asset_mapping_verified: bool, capacity_search_max_usdt: Decimal | None = None) -> list[dict[str, Any]]:
     if status != "VERIFIED" or not asset_mapping_verified:
         return [{"route":"DEX_CEX","market_a":market_id,"status":"UNVERIFIED",
                  "reason":"V3 market or CEX asset mapping is not verified"}]
@@ -341,12 +341,22 @@ def evaluate_dex_cex(*, market_id: str, capital_sizes_usdt: Iterable[Decimal],
         gross_b = quote_out * quote_asset_usd_price - capital
         for route, gross in (("DEX_CEX", gross_a), ("CEX_DEX", gross_b)):
             net = gross - gas_cost_usdt if gas_cost_usdt is not None else None
+            def gross_at(size: Decimal, selected_route: str = route) -> Decimal:
+                qin = size / quote_asset_usd_price
+                if selected_route == "DEX_CEX":
+                    return quote_to_base(qin) * cex_bid * (1-cex_fee_rate) * quote_asset_usd_price - size
+                bought = qin / (cex_ask * (1+cex_fee_rate))
+                return base_to_quote(bought) * quote_asset_usd_price - size
+            capacity = (calculate_quote_capacity(gross_at, minimum_input=min(capital_sizes),
+                         maximum_input=capacity_search_max_usdt, gas_cost=gas_cost_usdt)
+                         if gas_cost_usdt is not None and capacity_search_max_usdt is not None else None)
             rows.append({"route":route,"market_a":market_id,"market_b":None,
                          "capital_usdt":capital,"gross_profit_usdt":gross,
                          "gas_cost_usdt":gas_cost_usdt,"net_profit_usdt":net,
                          "roi_percent":net/capital*100 if net is not None else None,
-                         "capacity_usdt":None,"status":"VERIFIED" if net is not None else "INSUFFICIENT_DATA",
-                         "reason":None if net is not None else "Gas cost unavailable"})
+                         "capacity_usdt":capacity,"status":"VERIFIED" if net is not None and capacity is not None else "INSUFFICIENT_DATA",
+                         "reason":None if net is not None and capacity is not None else
+                                  ("Capacity bounds/quotes unavailable" if net is not None else "Gas cost unavailable")})
     return rows
 
 
@@ -357,7 +367,7 @@ def evaluate_dex_dex(*, market_a: dict[str, Any], market_b: dict[str, Any],
                      b_quote_to_base: Callable[[Decimal], Decimal],
                      b_base_to_quote: Callable[[Decimal], Decimal],
                      quote_asset_usd_price: Decimal,
-                     gas_cost_a_usdt: Decimal | None, gas_cost_b_usdt: Decimal | None) -> list[dict[str, Any]]:
+                     gas_cost_a_usdt: Decimal | None, gas_cost_b_usdt: Decimal | None, capacity_search_max_usdt: Decimal | None = None) -> list[dict[str, Any]]:
     compatible = (market_a["chain_id"] == market_b["chain_id"]
                   and market_a["token_base"]["address"].lower() == market_b["token_base"]["address"].lower()
                   and market_a["token_quote"]["address"].lower() == market_b["token_quote"]["address"].lower()
@@ -377,11 +387,19 @@ def evaluate_dex_dex(*, market_a: dict[str, Any], market_b: dict[str, Any],
             quote_out = second(first(quote_in))
             gross = (quote_out-quote_in)*quote_asset_usd_price
             net = gross-gas if gas is not None else None
+            def gross_at(size: Decimal, first_quote: Callable[[Decimal], Decimal] = first,
+                         second_quote: Callable[[Decimal], Decimal] = second) -> Decimal:
+                q = size / quote_asset_usd_price
+                return (second_quote(first_quote(q))-q)*quote_asset_usd_price
+            capacity = (calculate_quote_capacity(gross_at,minimum_input=min(capital_sizes),
+                         maximum_input=capacity_search_max_usdt,gas_cost=gas)
+                         if gas is not None and capacity_search_max_usdt is not None else None)
             rows.append({"route":"DEX_DEX","market_a":source["id"],"market_b":destination["id"],
                          "capital_usdt":capital,"gross_profit_usdt":gross,"gas_cost_usdt":gas,
                          "net_profit_usdt":net,"roi_percent":net/capital*100 if net is not None else None,
-                         "capacity_usdt":None,"status":"VERIFIED" if net is not None else "INSUFFICIENT_DATA",
-                         "reason":None if net is not None else "One or both gas costs unavailable"})
+                         "capacity_usdt":capacity,"status":"VERIFIED" if net is not None and capacity is not None else "INSUFFICIENT_DATA",
+                         "reason":None if net is not None and capacity is not None else
+                                  ("Capacity bounds/quotes unavailable" if net is not None else "One or both gas costs unavailable")})
     return rows
 
 
@@ -406,6 +424,29 @@ def calculate_quote_capacity(quote_profit: Callable[[Decimal], Decimal], *,
         else:
             high = mid
     return low
+
+
+def quote_capital_grid(snapshot: V3PoolSnapshot, quoter: V3QuoterV2, *,
+                       capital_sizes_usdt: Iterable[Decimal],
+                       token0_usd_price: Decimal, token1_usd_price: Decimal) -> list[dict[str, Any]]:
+    """Quote USD-capital equivalents in both directions using independently verified USD prices."""
+    if token0_usd_price <= 0 or token1_usd_price <= 0:
+        raise ValueError("Both token USD prices must be independently verified and positive")
+    rows = []
+    for capital in capital_sizes_usdt:
+        for token_in, usd_price in ((snapshot.token0, token0_usd_price),
+                                    (snapshot.token1, token1_usd_price)):
+            quote = quoter.quote(snapshot, token_in, capital / usd_price)
+            rows.append({"capital_usdt":capital,"direction":f"{quote.token_in}->{quote.token_out}",
+                         "amount_in":quote.amount_in,"amount_out":quote.amount_out,
+                         "effective_price":quote.effective_price,"spot_price":quote.spot_price,
+                         "price_impact_bps":quote.price_impact_bps,
+                         "initialized_ticks_crossed":quote.initialized_ticks_crossed,
+                         "gas_estimate":quote.gas_estimate,"fee_units":quote.fee_units,
+                         "tick_before":quote.tick_before,"sqrt_price_x96_after":quote.sqrt_price_x96_after,
+                         "block_number":quote.block_number,"timestamp_utc":quote.timestamp_utc,
+                         "status":"VERIFIED"})
+    return rows
 
 
 async def discover_dexscreener_pairs(query: str, allowed_chain_names: set[str],
