@@ -22,7 +22,14 @@
     "provider": "dexscreener",
     "minimum_liquidity_usd": 10000,
     "minimum_volume_24h_usd": 10000,
-    "verification": "ONCHAIN_FACTORY_POOL_QUOTER_REQUIRED"
+    "verification": "ONCHAIN_FACTORY_POOL_QUOTER_REQUIRED",
+    "onchain_validation": "FACTORY_GETPOOL_POOL_STATE_AND_BIDIRECTIONAL_QUOTER_V2_REQUIRED",
+    "fee_tiers": [
+      100,
+      500,
+      3000,
+      10000
+    ]
   },
   "chains": [
     {
@@ -40,49 +47,203 @@
       "name": "ethereum",
       "rpc_env": "ETHEREUM_RPC_URL",
       "native_symbol": "ETH",
-      "status": "UNVERIFIED"
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "OFFICIAL_REFERENCE_UNVERIFIED",
+        "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        "quoter_v2": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+        "router02": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/docs/protocols/v3/deployments/v3-ethereum-deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ]
+      }
     },
     {
       "id": 56,
       "name": "bsc",
       "rpc_env": "BSC_RPC_URL",
       "native_symbol": "BNB",
-      "status": "UNVERIFIED"
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "OFFICIAL_REFERENCE_UNVERIFIED",
+        "factory": "0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7",
+        "quoter_v2": "0x78D78E420Da98ad378D7799bE8f4AF69033EB077",
+        "router02": "0xB971eF87ede563556b2ED4b1C0b0019111Dd85d2",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ]
+      }
     },
     {
       "id": 137,
       "name": "polygon",
       "rpc_env": "POLYGON_RPC_URL",
       "native_symbol": "POL",
-      "status": "UNVERIFIED"
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "OFFICIAL_REFERENCE_UNVERIFIED",
+        "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        "quoter_v2": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+        "router02": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/docs/protocols/v3/deployments/v3-polygon-deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ]
+      }
     },
     {
       "id": 42161,
       "name": "arbitrum",
       "rpc_env": "ARBITRUM_RPC_URL",
       "native_symbol": "ETH",
-      "status": "UNVERIFIED"
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "OFFICIAL_REFERENCE_UNVERIFIED",
+        "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        "quoter_v2": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+        "router02": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/docs/protocols/v3/deployments/v3-arbitrum-deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ]
+      }
     },
     {
       "id": 8453,
       "name": "base",
       "rpc_env": "BASE_RPC_URL",
       "native_symbol": "ETH",
-      "status": "UNVERIFIED"
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "OFFICIAL_REFERENCE_UNVERIFIED",
+        "factory": "0x33128a8fC17869897dcE68Ed026d694621f6FDfD",
+        "quoter_v2": "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a",
+        "router02": "0x2626664c2603336E57B271c5C0b26F421741e481",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/docs/protocols/v3/deployments/v3-base-deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ]
+      }
     },
     {
       "id": 10,
       "name": "optimism",
       "rpc_env": "OPTIMISM_RPC_URL",
       "native_symbol": "ETH",
-      "status": "UNVERIFIED"
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "OFFICIAL_REFERENCE_UNVERIFIED",
+        "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        "quoter_v2": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+        "router02": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/docs/protocols/v3/deployments/v3-optimism-deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ]
+      }
     },
     {
       "id": 43114,
       "name": "avalanche",
       "rpc_env": "AVALANCHE_RPC_URL",
       "native_symbol": "AVAX",
-      "status": "UNVERIFIED"
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "OFFICIAL_REFERENCE_UNVERIFIED",
+        "factory": "0x740b1c1de25031C31FF4fC9A62f554A55cdC1baD",
+        "quoter_v2": "0xbe0F5544EC67e9B3b2D979aaA43f18Fd87E6257F",
+        "router02": "0xbb00FF08d01D300023C629E8fFfFcb65A5a578cE",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ]
+      }
     }
   ],
   "markets": [
