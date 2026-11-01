@@ -120,6 +120,8 @@ async def scan_registry(registry: dict[str, Any], chains: dict[int, dict[str, An
                         row["fee_units"] = matching[0]["fee_units"]
                         row["pool_liquidity"] = matching[0]["pool_liquidity"]
                         row["tick_before"] = matching[0]["tick_before"]
+                        row["block_number"] = matching[0]["block_number"]
+                        row["timestamp_utc"] = matching[0]["timestamp_utc"]
                 opportunity_rows.extend(rows)
             except Exception as exc:
                 opportunity_rows.append({"route":"DEX_CEX","market_a":market["id"],
