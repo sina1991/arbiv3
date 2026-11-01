@@ -111,7 +111,11 @@
         "symbol": "ZIL-USDT",
         "base_asset": "ZIL",
         "quote_asset": "USDT",
-        "asset_mapping_verified": false
+        "asset_mapping_verified": false,
+        "base_token_address": "0x94e18aE7dd5eE57B55f30c4B63E2760c09EFb192",
+        "quote_token_address": "0x2274005778063684fbB1BfA96a2b725dc37d75f9",
+        "fee_rate": null,
+        "fee_rate_verified": false
       },
       "estimated_round_trip_gas_usdt": null,
       "enabled": false,
@@ -119,7 +123,26 @@
       "disabled_reason": "Official factory and QuoterV2 addresses are documented, but current RPC connectivity, factory-to-pool mapping, pool state, ABI probe quotes and WZIL/ZIL mapping have not yet been independently validated on-chain.",
       "probe_token": "0x2274005778063684fbB1BfA96a2b725dc37d75f9",
       "probe_amount": "0.01",
-      "deployment_source": "https://docs.plunderswap.com/developers/"
+      "deployment_source": "https://docs.plunderswap.com/developers/",
+      "token_base": {
+        "symbol": "WZIL",
+        "address": "0x94e18aE7dd5eE57B55f30c4B63E2760c09EFb192",
+        "decimals": 18
+      },
+      "token_quote": {
+        "symbol": "zUSDT",
+        "address": "0x2274005778063684fbB1BfA96a2b725dc37d75f9",
+        "decimals": 6
+      },
+      "token0_usd_price": null,
+      "token1_usd_price": null,
+      "usd_prices_verified": false,
+      "quote_token_usd_price": null,
+      "native_token_usd_price": null,
+      "native_token_usd_price_verified": false,
+      "gas_safety_multiplier": "1.2",
+      "slippage_bps": 30,
+      "capacity_search_max_usdt": null
     }
   ]
 }
