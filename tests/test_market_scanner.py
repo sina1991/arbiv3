@@ -128,7 +128,7 @@ def test_v3_factory_pool_token_fee_tick_liquidity_validation_with_mock_rpc():
     token0=Web3.to_checksum_address("0x"+"11"*20)
     token1=Web3.to_checksum_address("0x"+"22"*20)
     contracts={
-      factory.lower():FakeContract({"getPool":pool}),
+      factory.lower():FakeContract({"getPool":pool,"feeAmountTickSpacing":10}),
       pool.lower():FakeContract({"factory":factory,"token0":token0,"token1":token1,
         "fee":500,"tickSpacing":10,"slot0":(2**96,0,0,0,0,0,True),"liquidity":1000}),
       token0.lower():FakeContract({"decimals":18,"symbol":"A"}),
@@ -151,7 +151,7 @@ def test_v3_validator_rejects_wrong_factory_mapping():
     token1=Web3.to_checksum_address("0x"+"22"*20)
     other=Web3.to_checksum_address("0x"+"cc"*20)
     contracts={
-      factory.lower():FakeContract({"getPool":other}),
+      factory.lower():FakeContract({"getPool":other,"feeAmountTickSpacing":10}),
       pool.lower():FakeContract({"factory":factory,"token0":token0,"token1":token1,
         "fee":500,"tickSpacing":10,"slot0":(2**96,0,0,0,0,0,True),"liquidity":1000}),
       token0.lower():FakeContract({"decimals":18,"symbol":"A"}),
@@ -169,3 +169,19 @@ def test_gas_cost_conversion_requires_real_positive_inputs():
     assert cost==D("18")
     with pytest.raises(ValueError):
         estimate_gas_cost_usdt(0,30_000_000_000,D("3000"))
+
+
+def test_quote_grid_requests_six_sizes_in_both_directions():
+    from market_scanner import V3PoolSnapshot, V3Quote, quote_capital_grid
+    class FakeQuoter:
+        def quote(self,snapshot,token_in,amount_in):
+            token_out=snapshot.token1 if token_in==snapshot.token0 else snapshot.token0
+            return V3Quote(token_in,token_out,amount_in,amount_in*D("2"),D("2"),D("2"),
+                           D("0"),0,100000,123,"2026-01-01T00:00:00+00:00",500,0,2**96)
+    snapshot=V3PoolSnapshot(1,"factory","pool","token0","token1",18,6,500,10,
+                            2**96,0,1000,True,123,"2026-01-01T00:00:00+00:00")
+    rows=quote_capital_grid(snapshot,FakeQuoter(),capital_sizes_usdt=CAPITAL_SIZES_USDT,
+                            token0_usd_price=D("1"),token1_usd_price=D("1"))
+    assert len(rows)==12
+    assert len({row["capital_usdt"] for row in rows})==6
+    assert {row["direction"] for row in rows}=={"token0->token1","token1->token0"}
