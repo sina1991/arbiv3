@@ -166,6 +166,6 @@ def test_v3_validator_rejects_wrong_factory_mapping():
 
 def test_gas_cost_conversion_requires_real_positive_inputs():
     cost=estimate_gas_cost_usdt(200_000,30_000_000_000,D("3000"))
-    assert cost==D("0.018")
+    assert cost==D("18")
     with pytest.raises(ValueError):
         estimate_gas_cost_usdt(0,30_000_000_000,D("3000"))
