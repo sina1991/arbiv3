@@ -1,40 +1,23 @@
-# arbiV3
+# arbiV3 — V3-only multi-chain arbitrage research scanner
 
-A standalone ZIL-USDT cross-exchange arbitrage bot using **PlunderSwap V3 only** and KuCoin spot markets.
+arbiV3 is a **Uniswap V3 / V3-compatible concentrated-liquidity** arbitrage scanner. Its core supports V3 factories, V3 pools, fee tiers, tick state and QuoterV2. V2 constant-product pools, reserve-based quoting and hybrid V2/V3 routing are explicitly out of scope.
 
-## Supported market and routes
+## Safety and operating mode
 
-- DEX market: WZIL / zUSDT on the configured PlunderSwap V3 pool.
-- CEX market: ZIL-USDT on KuCoin.
-- Buy WZIL on PlunderSwap V3 (exact output), then sell ZIL on KuCoin.
-- Buy ZIL on KuCoin, then sell WZIL on PlunderSwap V3 (exact input).
+- Read-only: no transaction signing, broadcasting, approvals or exchange orders.
+- KuCoin integration is public market data only, including aggregated Level-2 depth for size-aware fills.
+- Never enable a market without validating its chain, factory, pool, token metadata, fee, QuoterV2 ABI/deployment and successful quotes.
+- DexScreener is discovery-only. Candidate pairs remain `UNVERIFIED` until checked on-chain.
+- Unknown gas, token USD price, CEX asset mapping, Level-2 depth, execution slippage bound or liquidity capacity means no net profit and no ranking.
+- Cross-chain opportunities are excluded unless a separately validated bridge/inventory model is added.
 
-## Safety modes
+## Networks
 
-The default is `DRY_RUN`. It reads market data, obtains V3 quotes by calling the configured V3 router through `eth_call`, evaluates balances and estimated profitability, and logs candidate trades. It does not sign or broadcast blockchain transactions and does not submit KuCoin orders.
+The registry contains Zilliqa EVM (32769), Ethereum (1), BNB Chain (56), Polygon (137), Arbitrum (42161), Base (8453), Optimism (10) and Avalanche (43114). Registry presence does not mean operational support. Each chain requires working RPC and matching chain ID, then separately verified V3 deployments.
 
-Real trading requires both:
-```dotenv
-TRADING_MODE=LIVE
-LIVE_TRADING_CONFIRM=I_UNDERSTAND_REAL_ORDERS
-```
-Live mode can submit real orders and spend real assets. Start with DRY_RUN and verify the pool, router, token addresses, decimals, fee tier, wallet, allowances, and KuCoin account before enabling it.
+## Install
 
-## Important execution model
-
-This is pre-funded cross-exchange arbitrage: WZIL and zUSDT must already be available in the PlunderSwap wallet, while ZIL and USDT must already be available in KuCoin. The bot does not transfer assets between venues.
-
-The two venue trades are not atomic. A successful trade on one venue followed by a failure on the other can leave inventory unbalanced. Live execution verifies KuCoin order fills and on-chain receipts; if the second leg fails or is partial, the process halts for manual reconciliation instead of automatically retrying. It cannot guarantee a hedge. Use conservative sizes and monitor inventory.
-
-The zUSDT proceeds/cost are compared 1:1 with USDT for the estimate. A zUSDT depeg, redemption limitation, or liquidity discount is not currently modeled.
-
-## V3 quoting
-
-Quotes are requested from the PlunderSwap V3 router using read-only `eth_call` against `exactInputSingle` and `exactOutputSingle`. This delegates tick traversal and pool fee application to the deployed contract rather than approximating a swap from the current `sqrtPriceX96` and active liquidity. A quote can fail if the wallet lacks the required token balance/allowance or if the router/pool configuration is wrong; failures are treated as unavailable quotes, never as zero-cost opportunities.
-
-## Setup
-
-Python 3.11+
+Python 3.11+:
 
 ```bash
 python -m venv .venv
@@ -43,29 +26,49 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Fill in the RPC endpoint, KuCoin credentials, and wallet address. The wallet private key is only required for LIVE mode. Never commit `.env`. The wallet must already hold the relevant assets and have sufficient token allowances granted to the configured router; the bot does not issue approvals automatically. Router-based quotes can fail when the wallet has insufficient balance or allowance.
+## Commands
 
-## Run
+Inspect registry and emit JSON/CSV reports:
 
 ```bash
 python main.py
 ```
 
-Set `TRADING_MODE=DRY_RUN` for safe observation. The bot refuses LIVE mode unless the explicit confirmation variable is also set.
+Discover candidate markets (not verified or rankable):
 
-## Configuration notes
+```bash
+python main.py --discover USDT
+python main.py --discover USDC --min-liquidity 25000 --min-volume 50000
+```
 
-- The configured PlunderSwap V3 fee is expressed in V3 fee units (1,000,000 = 100%), not basis points. The default `100` corresponds to 0.01%; startup verifies it against the configured pool.
-- WZIL uses 18 decimals and zUSDT uses 6 decimals in the current configuration; verify on-chain.
-- The default per-size minimum-profit thresholds preserve the previous V3 strategy: 0.08, 0.18, 0.40 and 1.00 USDT for 5k, 10k, 15k and 25k ZIL respectively. The strategy prioritizes the largest size that passes all checks.
-- The KuCoin market order uses ZIL quantity. The implementation checks final order status and filled size rather than treating order acceptance as a completed fill.
-- Estimated network gas is converted to USDT using the current KuCoin ZIL bid. Gas cost uses the configured gas limit and multiplier, so treat it as a conservative estimate, not a guarantee of realized gas expenditure.
-- Market profitability uses best bid/ask and does not yet model full order-book depth or guarantee execution at those prices.
+Validate a configured V3 market's RPC, chain ID, factory getPool mapping, pool factory/token ordering/fee/tickSpacing/slot0/liquidity, ERC-20 decimals, QuoterV2 bytecode and bidirectional probe quotes:
+
+```bash
+python main.py --validate plunderswap_v3_wzil_zusdt_reference
+python main.py --check-networks
+python main.py --scan
+```
+
+Validation outputs are written to `reports/` in JSON and CSV. `--scan` runs all enabled markets through the V3 quote grid, KuCoin L2 evaluation and same-chain V3-V3 comparison. A successful deployment probe alone does not prove token USD parity, gas conversion, CEX mapping or economic profitability.
+
+## V3 architecture
+
+- `V3PoolValidator`: chain ID, deployed contracts, Factory.getPool, pool.factory, token0/token1, decimals, fee, factory tickSpacing, configurable slot0 ABI, active liquidity and block timestamp.
+- `V3QuoterV2`: V3 QuoterV2 exact-input quote with output, post-swap sqrtPriceX96, initialized ticks crossed and gas estimate.
+- `quote_capital_grid`: six USD-equivalent capital sizes in both directions, requiring independent USD prices for both tokens.
+- `calculate_quote_capacity`: quote-driven search over a supplied liquidity-backed capital bound; it is not the maximum profitable sample size.
+- `evaluate_dex_cex` and `evaluate_dex_dex`: both directions, explicit token compatibility, fees and gas inputs.
+- `rank_opportunities`: only VERIFIED, fully costed opportunities with measured capacity are eligible; weights are 45% net profit, 35% ROI, 20% capital capacity.
+
+## PlunderSwap reference
+
+The WZIL/zUSDT market on Zilliqa remains disabled and reference-only. Its Factory, Pool mapping, token ordering/decimals, fee tier, tick spacing, configured slot0 ABI, liquidity and bidirectional QuoterV2 probe quotes have been verified against the supplied Zilliqa RPC. WZIL and KuCoin ZIL are not assumed equivalent; asset mapping, verified token USD prices, CEX fee, gas conversion and capacity bounds remain unresolved, so the market is not rankable.
 
 ## Tests
 
 ```bash
+python -m compileall -q .
 python -m pytest -q
 ```
 
-Tests cover pure arbitrage arithmetic and safety-mode behavior. They do not replace fork testing or small-value live validation.
+Mock tests do not prove a live deployment. Integration tests must be run only against verified deployments. No secrets belong in the repository.

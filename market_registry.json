@@ -1,0 +1,388 @@
+{
+  "schema_version": 2,
+  "project_architecture": "V3_ONLY_CONCENTRATED_LIQUIDITY",
+  "capital_sizes_usdt": [
+    "100",
+    "250",
+    "500",
+    "1000",
+    "2500",
+    "5000"
+  ],
+  "comparison_routes": [
+    "DEX_CEX",
+    "DEX_DEX"
+  ],
+  "ranking_weights": {
+    "net_profit": "0.45",
+    "roi": "0.35",
+    "capital_capacity": "0.20"
+  },
+  "discovery": {
+    "provider": "dexscreener",
+    "minimum_liquidity_usd": 10000,
+    "minimum_volume_24h_usd": 10000,
+    "verification": "ONCHAIN_FACTORY_POOL_QUOTER_REQUIRED",
+    "onchain_validation": "FACTORY_GETPOOL_POOL_STATE_AND_BIDIRECTIONAL_QUOTER_V2_REQUIRED",
+    "fee_tiers": [
+      100,
+      500,
+      3000,
+      10000
+    ]
+  },
+  "chains": [
+    {
+      "id": 32769,
+      "name": "zilliqa",
+      "rpc_env": "ZILLIQA_RPC_URL",
+      "native_symbol": "ZIL",
+      "status": "UNVERIFIED",
+      "rpc_status": "VERIFIED",
+      "rpc_chain_id": 32769,
+      "rpc_checked_at": "2026-11-01T18:33:41Z"
+    },
+    {
+      "id": 1,
+      "name": "ethereum",
+      "rpc_env": "ETHEREUM_RPC_URL",
+      "native_symbol": "ETH",
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "V3_DEPLOYMENT_VERIFIED",
+        "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        "quoter_v2": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+        "router02": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/docs/protocols/v3/deployments/v3-ethereum-deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ],
+        "verified_at": "2026-11-01T18:43:27Z",
+        "verified_block": 26321789,
+        "verified_fee_tier_tick_spacing": {
+          "100": 1,
+          "500": 10,
+          "3000": 60,
+          "10000": 200
+        }
+      }
+    },
+    {
+      "id": 56,
+      "name": "bsc",
+      "rpc_env": "BSC_RPC_URL",
+      "native_symbol": "BNB",
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "V3_DEPLOYMENT_VERIFIED",
+        "factory": "0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7",
+        "quoter_v2": "0x78D78E420Da98ad378D7799bE8f4AF69033EB077",
+        "router02": "0xB971eF87ede563556b2ED4b1C0b0019111Dd85d2",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ],
+        "verified_at": "2026-11-01T18:43:27Z",
+        "verified_block": 131099096,
+        "verified_fee_tier_tick_spacing": {
+          "100": 1,
+          "500": 10,
+          "3000": 60,
+          "10000": 200
+        }
+      }
+    },
+    {
+      "id": 137,
+      "name": "polygon",
+      "rpc_env": "POLYGON_RPC_URL",
+      "native_symbol": "POL",
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "V3_DEPLOYMENT_VERIFIED",
+        "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        "quoter_v2": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+        "router02": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/docs/protocols/v3/deployments/v3-polygon-deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ],
+        "verified_at": "2026-11-01T18:43:27Z",
+        "verified_block": 96568798,
+        "verified_fee_tier_tick_spacing": {
+          "100": 1,
+          "500": 10,
+          "3000": 60,
+          "10000": 200
+        }
+      }
+    },
+    {
+      "id": 42161,
+      "name": "arbitrum",
+      "rpc_env": "ARBITRUM_RPC_URL",
+      "native_symbol": "ETH",
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "V3_DEPLOYMENT_VERIFIED",
+        "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        "quoter_v2": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+        "router02": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/docs/protocols/v3/deployments/v3-arbitrum-deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ],
+        "verified_at": "2026-11-01T18:43:27Z",
+        "verified_block": 520352579,
+        "verified_fee_tier_tick_spacing": {
+          "100": 1,
+          "500": 10,
+          "3000": 60,
+          "10000": 200
+        }
+      }
+    },
+    {
+      "id": 8453,
+      "name": "base",
+      "rpc_env": "BASE_RPC_URL",
+      "native_symbol": "ETH",
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "V3_DEPLOYMENT_VERIFIED",
+        "factory": "0x33128a8fC17869897dcE68Ed026d694621f6FDfD",
+        "quoter_v2": "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a",
+        "router02": "0x2626664c2603336E57B271c5C0b26F421741e481",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/docs/protocols/v3/deployments/v3-base-deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ],
+        "verified_at": "2026-11-01T18:43:27Z",
+        "verified_block": 53384653,
+        "verified_fee_tier_tick_spacing": {
+          "100": 1,
+          "500": 10,
+          "3000": 60,
+          "10000": 200
+        }
+      }
+    },
+    {
+      "id": 10,
+      "name": "optimism",
+      "rpc_env": "OPTIMISM_RPC_URL",
+      "native_symbol": "ETH",
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "V3_DEPLOYMENT_VERIFIED",
+        "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        "quoter_v2": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+        "router02": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/docs/protocols/v3/deployments/v3-optimism-deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ],
+        "verified_at": "2026-11-01T18:43:27Z",
+        "verified_block": 158979938,
+        "verified_fee_tier_tick_spacing": {
+          "100": 1,
+          "500": 10,
+          "3000": 60,
+          "10000": 200
+        }
+      }
+    },
+    {
+      "id": 43114,
+      "name": "avalanche",
+      "rpc_env": "AVALANCHE_RPC_URL",
+      "native_symbol": "AVAX",
+      "status": "UNVERIFIED",
+      "v3_deployments": {
+        "protocol": "uniswap_v3",
+        "deployment_status": "V3_DEPLOYMENT_VERIFIED",
+        "factory": "0x740b1c1de25031C31FF4fC9A62f554A55cdC1baD",
+        "quoter_v2": "0xbe0F5544EC67e9B3b2D979aaA43f18Fd87E6257F",
+        "router02": "0xbb00FF08d01D300023C629E8fFfFcb65A5a578cE",
+        "fee_tiers": [
+          100,
+          500,
+          3000,
+          10000
+        ],
+        "deployment_source": "https://developers.uniswap.org/deployments",
+        "verification_required": [
+          "rpc_chain_id",
+          "factory_bytecode",
+          "quoter_bytecode",
+          "fee_tier_tick_spacing",
+          "candidate_pool_factory_mapping",
+          "bidirectional_quoter_probe"
+        ],
+        "verified_at": "2026-11-01T18:43:27Z",
+        "verified_block": 99153708,
+        "verified_fee_tier_tick_spacing": {
+          "100": 1,
+          "500": 10,
+          "3000": 60,
+          "10000": 200
+        }
+      }
+    }
+  ],
+  "markets": [
+    {
+      "id": "plunderswap_v3_wzil_zusdt_reference",
+      "chain_id": 32769,
+      "chain": "zilliqa",
+      "dex": "plunderswap",
+      "version": "V3",
+      "factory": "0x000A3ED861B2cC98Cc5f1C0Eb4d1B53904c0c93a",
+      "pool": "0xD9969Fac78afC7C696443802C0b8cFf1b1B45Fc8",
+      "router": "0xe30161F32A019d876F082d9FF13ed451a03A2086",
+      "quoter": "0xAE4474364B8fc6Ce0fe8F888752540C05948AD94",
+      "token0": {
+        "symbol": "zUSDT",
+        "address": "0x2274005778063684fbB1BfA96a2b725dc37d75f9",
+        "decimals": 6
+      },
+      "token1": {
+        "symbol": "WZIL",
+        "address": "0x94e18aE7dd5eE57B55f30c4B63E2760c09EFb192",
+        "decimals": 18
+      },
+      "fee_type": "v3_fee_units",
+      "fee": 100,
+      "quote_adapter": "v3_quoter_v2",
+      "cex": {
+        "exchange": "kucoin",
+        "symbol": "ZIL-USDT",
+        "base_asset": "ZIL",
+        "quote_asset": "USDT",
+        "asset_mapping_verified": false,
+        "base_token_address": "0x94e18aE7dd5eE57B55f30c4B63E2760c09EFb192",
+        "quote_token_address": "0x2274005778063684fbB1BfA96a2b725dc37d75f9",
+        "fee_rate": null,
+        "fee_rate_verified": false
+      },
+      "estimated_round_trip_gas_usdt": null,
+      "enabled": false,
+      "status": "UNVERIFIED",
+      "disabled_reason": "On-chain V3 Factory, Pool, token ordering/decimals, fee tier, tick spacing, slot0 ABI, liquidity and bidirectional QuoterV2 probes are verified. Remains disabled because WZIL-to-KuCoin-ZIL asset mapping, verified token USD prices, CEX fee, native-token USD gas conversion and liquidity-backed capacity bound are not verified.",
+      "probe_token": "0x2274005778063684fbB1BfA96a2b725dc37d75f9",
+      "probe_amount": "0.01",
+      "deployment_source": "https://docs.plunderswap.com/developers/",
+      "token_base": {
+        "symbol": "WZIL",
+        "address": "0x94e18aE7dd5eE57B55f30c4B63E2760c09EFb192",
+        "decimals": 18
+      },
+      "token_quote": {
+        "symbol": "zUSDT",
+        "address": "0x2274005778063684fbB1BfA96a2b725dc37d75f9",
+        "decimals": 6
+      },
+      "token0_usd_price": null,
+      "token1_usd_price": null,
+      "usd_prices_verified": false,
+      "quote_token_usd_price": null,
+      "native_token_usd_price": null,
+      "native_token_usd_price_verified": false,
+      "gas_safety_multiplier": "1.2",
+      "slippage_bps": 30,
+      "capacity_search_max_usdt": null,
+      "slot0_fee_protocol_type": "uint32",
+      "onchain_status": "VERIFIED",
+      "onchain_verified_at": "2026-11-01T18:33:41Z",
+      "onchain_verified_block": 39425715,
+      "onchain_probe_quotes": [
+        {
+          "direction": "zUSDT_to_WZIL",
+          "amount_in": "0.01",
+          "amount_out": "0.000697129281506808",
+          "block_number": 39425717,
+          "gas_estimate": 83302
+        },
+        {
+          "direction": "WZIL_to_zUSDT",
+          "amount_in": "0.01",
+          "amount_out": "0.143416",
+          "block_number": 39425718,
+          "gas_estimate": 89966
+        }
+      ]
+    }
+  ]
+}

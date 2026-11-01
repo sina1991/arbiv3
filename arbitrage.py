@@ -21,13 +21,13 @@ def evaluate_opportunities(
         if buy_cost is not None:
             proceeds = size * kucoin_bid * (Decimal("1") - kucoin_fee)
             raw_profit = proceeds - buy_cost
-            net_profit = raw_profit - gas_cost_usdt if gas_cost_usdt is not None else raw_profit
+            net_profit = raw_profit - gas_cost_usdt if gas_cost_usdt is not None else None
             complete = gas_cost_usdt is not None
             opportunities.append(Opportunity(
                 Direction.BUY_WZIL_ON_DEX_SELL_ZIL_ON_CEX, size, buy_cost,
                 Decimal("0"), Decimal("0"), proceeds, net_profit, gas_cost_usdt,
                 complete and net_profit >= threshold,
-                "gas-adjusted estimate" if complete else "gas conversion unavailable; not executable"
+                "gas-adjusted estimate" if complete else "gas conversion unavailable; net profit unknown"
             ))
 
         # Buy ZIL on KuCoin, then sell pre-funded WZIL on V3.
@@ -35,7 +35,7 @@ def evaluate_opportunities(
         if sell_proceeds is not None:
             cex_cost = size * kucoin_ask * (Decimal("1") + kucoin_fee)
             raw_profit = sell_proceeds - cex_cost
-            net_profit = raw_profit - gas_cost_usdt if gas_cost_usdt is not None else raw_profit
+            net_profit = raw_profit - gas_cost_usdt if gas_cost_usdt is not None else None
             complete = gas_cost_usdt is not None
             opportunities.append(Opportunity(
                 Direction.BUY_ZIL_ON_CEX_SELL_WZIL_ON_DEX, size, Decimal("0"),
